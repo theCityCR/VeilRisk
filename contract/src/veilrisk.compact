@@ -1,0 +1,45 @@
+// VeilRisk portfolio-policy attestation contract.
+// Private circuit inputs are verified without being stored on the public ledger.
+
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+export ledger maxSpeculativeBps: Uint<16>;
+export ledger maxGrowthBps: Uint<16>;
+export ledger maxSingleBucketBps: Uint<16>;
+export ledger successfulProofs: Counter;
+
+constructor(
+  speculativeLimit: Uint<16>,
+  growthLimit: Uint<16>,
+  singleBucketLimit: Uint<16>
+) {
+  assert(speculativeLimit <= 10000, "Speculative limit must be a percentage");
+  assert(growthLimit <= 10000, "Growth limit must be a percentage");
+  assert(singleBucketLimit <= 10000, "Concentration limit must be a percentage");
+
+  maxSpeculativeBps = disclose(speculativeLimit);
+  maxGrowthBps = disclose(growthLimit);
+  maxSingleBucketBps = disclose(singleBucketLimit);
+}
+
+export circuit proveCompliance(
+  cashBps: Uint<16>,
+  bondsBps: Uint<16>,
+  equitiesBps: Uint<16>,
+  speculativeBps: Uint<16>
+): [] {
+  const total = cashBps + bondsBps + equitiesBps + speculativeBps;
+  const growth = equitiesBps + speculativeBps;
+
+  assert(total == 10000, "Portfolio allocations must sum to 100 percent");
+  assert(speculativeBps <= maxSpeculativeBps, "Speculative exposure exceeds policy");
+  assert(growth <= maxGrowthBps, "Combined growth exposure exceeds policy");
+  assert(cashBps <= maxSingleBucketBps, "Cash concentration exceeds policy");
+  assert(bondsBps <= maxSingleBucketBps, "Bond concentration exceeds policy");
+  assert(equitiesBps <= maxSingleBucketBps, "Equity concentration exceeds policy");
+  assert(speculativeBps <= maxSingleBucketBps, "Speculative concentration exceeds policy");
+
+  successfulProofs.increment(1);
+}

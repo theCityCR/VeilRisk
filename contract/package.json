@@ -1,0 +1,9 @@
+{
+  "name": "@veilrisk/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compact": "compact compile src/veilrisk.compact src/managed/veilrisk"
+  }
+}
