@@ -394,7 +394,8 @@ Implemented:
 
 Not yet implemented or verified:
 
-- Devpost submission materials.
+- final Devpost form submission and required public two-minute demo; a
+  copy-ready submission draft is maintained in `docs/DEVPOST_SUBMISSION.md`.
 
 ## 11. Resume-quality outcome
 

@@ -24,6 +24,11 @@ identifier, and compliance outcome. `contract/src/veilrisk.compact` contains the
 matching Compact circuit, and both engines run the same shared basis-point
 boundary vectors in tests.
 
+![VeilRisk private portfolio controls beside a privacy-safe local compliance preview](docs/assets/veilrisk-private-public-preview.jpg)
+
+_The submission image deliberately shows the explicitly labelled local preview;
+it does not present a simulated result as a finalized transaction._
+
 ## Privacy boundary
 
 | Data | Visibility |
@@ -143,7 +148,8 @@ maintenance workflow; the deployed policy is intended to remain fixed.
 
 ## Focused roadmap
 
-- Prepare the Devpost submission materials.
+- Review and paste the prepared
+  [`docs/DEVPOST_SUBMISSION.md`](docs/DEVPOST_SUBMISSION.md) copy into Devpost.
 - Record the required two-minute public demo.
 
 ## Project structure
