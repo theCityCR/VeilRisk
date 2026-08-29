@@ -14,7 +14,7 @@ import {
 } from "./verification.ts";
 
 type VeilRiskGeneratedContract = VeilRiskContract<undefined>;
-type MidnightProviders = Readonly<{ publicDataProvider: PublicDataProvider }> & object;
+export type MidnightProviders = Readonly<{ publicDataProvider: PublicDataProvider }> & object;
 
 type PublicDeployData = Readonly<{
   contractAddress: string;

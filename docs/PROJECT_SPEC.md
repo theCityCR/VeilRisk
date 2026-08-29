@@ -384,6 +384,10 @@ Implemented:
   public policy, returns only public identifiers, verifies the indexed ledger
   limits, and preserves a public receipt for recovery if indexer verification
   fails;
+- a local Preprod deployment command using the compatible Midnight wallet SDK,
+  a hidden interactive recovery-phrase prompt, local proof server, tDUST
+  readiness check, indexed public-state verification, wallet cleanup, and an
+  atomic public-only receipt write;
 - a tracked public-only Preprod deployment record whose address and transaction
   fields remain empty until a real deployment is verified;
 - public-safe explanation copy;
@@ -396,7 +400,7 @@ Not yet implemented or verified:
 
 - browser E2E coverage for proof execution, transaction, indexer, and AI
   journeys when those product surfaces are implemented;
-- completion of the wallet-approved `/deploy` transaction and population of
+- completion of either deployment path and population of
   `config/preprod-deployment.json` with its verified public receipt;
 - real proof generation through Lace's configured proving provider;
 - deployment to a Midnight network;

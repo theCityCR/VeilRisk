@@ -85,21 +85,41 @@ contract.
 
 ## Deploy the policy contract on Preprod
 
-Start the app, then open `http://localhost:3000/deploy` in a browser where Lace
-is installed and configured for Preprod. The operator page deploys the fixed
-Conservative mandate (20% speculative, 70% growth, and 60% concentration), then
-reads the indexed ledger state back before reporting success.
+The reliable operator path is a local, headless wallet command. Before running
+it, make sure the local proof server is ready at `http://127.0.0.1:6300` and the
+Lace account has finished synchronizing and is generating tDUST. Then run:
 
-The page exposes only the public network, contract address, deployment
-transaction ID, and policy. It never logs or serializes the SDK deployment
-object because that object also contains private wallet and maintenance data.
-After a successful deployment, copy the public receipt into
-`config/preprod-deployment.json` and commit that public record. Never add wallet
-keys, addresses, witness data, or SDK diagnostic objects to the file.
+```bash
+npm run deploy:preprod
+```
+
+The command compiles the contract, checks the proof server before requesting a
+secret, and asks for the Lace recovery phrase through a hidden terminal prompt.
+It deliberately accepts no arguments and refuses redirected input, so do not
+put the phrase in an environment variable, command-line argument, project file,
+or chat. It derives the same account locally in process memory, waits up to
+three minutes for Preprod synchronization, confirms that tDUST is available,
+and deploys the fixed Conservative mandate (20% speculative, 70% growth, and
+60% concentration).
+
+After finalization, the command reads the indexed ledger state and confirms the
+three policy limits and an initial proof count of zero. Only then does it update
+`config/preprod-deployment.json`. Its terminal output and saved receipt contain
+only the public contract address, transaction ID, network, and policy. No
+portfolio allocation participates in policy deployment.
+
+The browser operator page remains available at `http://localhost:3000/deploy`
+for Lace connector testing. It performs the same public-state verification, but
+the local command does not depend on the browser extension connection.
+
+Neither deployment path logs or serializes the SDK deployment object because
+that object also contains private wallet and maintenance data. Never add wallet
+keys, addresses, witness data, recovery phrases, or SDK diagnostic objects to
+the tracked public record.
 
 ## Focused roadmap
 
-- Complete the prepared Lace deployment at `/deploy` and record its verified public receipt.
+- Run the local Preprod deployment command and commit its verified public receipt.
 - Connect the prepared Lace providers to the browser verification action.
 - Replace the local preview action with the real proof and transaction lifecycle.
 - Expand browser E2E coverage with mocked proof and transaction journeys.
@@ -113,15 +133,16 @@ app/                 Browser experience
 lib/risk.ts          Deterministic policy engine
 lib/verification.ts  Injectable workflow and generated Midnight binding adapter
 contract/src/        Compact smart contract
-scripts/             Reproducible generated-asset preparation
+scripts/             Generated-asset preparation and local Preprod deployment
 .openai/hosting.json Optional frontend hosting configuration
 ```
 
 The verification layer accepts deterministic fakes for routine tests and owns
 the Midnight.js `CompiledContract` and `submitCallTx` details. The pinned
 Midnight runtime dependencies match Compact toolchain 0.31.1. Lace discovery,
-Preprod validation, and wallet-delegated provider creation are implemented;
-contract deployment and real Preprod verification remain separate milestones.
+Preprod validation, browser wallet-delegated providers, and a local headless
+deployment command are implemented; an actual verified Preprod receipt remains
+a separate external smoke milestone until the command succeeds on the network.
 
 This repository is intentionally scoped to a demonstrable privacy boundary. It
 does not execute trades, connect to brokerages, or provide financial advice.

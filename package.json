@@ -7,13 +7,16 @@
   },
   "scripts": {
     "contract:prepare": "npm --prefix contract run compact && node scripts/copy-contract-assets.mjs",
+    "predeploy:preprod": "npm run contract:prepare",
+    "deploy:preprod": "node --experimental-strip-types scripts/deploy-preprod.ts",
     "predev": "npm run contract:prepare",
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "prebuild": "npm run contract:prepare",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs && npm run test:e2e && npm --prefix contract test",
+    "test": "npm run build && npm run typecheck:deployment && node --experimental-strip-types --test tests/*.test.mjs && npm run test:e2e && npm --prefix contract test",
     "test:e2e": "playwright test",
+    "typecheck:deployment": "tsc --noEmit --target ES2022 --module esnext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --strict lib/headless-midnight-wallet.ts lib/local-preprod-deployment.ts scripts/deploy-preprod.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
@@ -21,13 +24,20 @@
     "@midnight-ntwrk/dapp-connector-api": "4.0.1",
     "@midnight-ntwrk/midnight-js-contracts": "4.1.1",
     "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.1.1",
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
     "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.1",
     "@midnight-ntwrk/midnight-js-protocol": "4.1.1",
     "@midnight-ntwrk/midnight-js-types": "4.1.1",
+    "@midnight-ntwrk/wallet-sdk": "1.2.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "3.1.2",
+    "@scure/bip39": "2.0.1",
     "buffer": "^6.0.3",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "rxjs": "7.8.2",
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -40,6 +50,7 @@
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
