@@ -177,8 +177,10 @@ speed but is not the source of public verification.
 inputs. It exposes policy limits as public state and permits a successful
 transaction only if every policy assertion passes.
 
-The contract compiles and its generated simulator passes shared boundary tests
-with the supported Compact toolchain. Real network execution is still pending.
+The contract compiles, its generated simulator passes shared boundary tests,
+and the fixed policy is deployed on Preprod. The browser call path is connected;
+the first real portfolio-compliance transaction remains pending external smoke
+verification.
 
 #### Midnight integration adapter
 
@@ -394,6 +396,12 @@ Implemented:
 - a real Preprod deployment of the fixed Conservative mandate, with its
   public-only address and transaction identifier recorded after independent
   indexer verification;
+- a browser verification action connected to that deployed contract, with
+  explicit proof, Lace approval, submission, finalization, retry, and stale-state
+  handling;
+- deterministic desktop and mobile E2E coverage for the successful lifecycle,
+  local short-circuiting, deployed-policy mismatch, each external failure, and
+  public-panel privacy;
 - public-safe explanation copy;
 - verified Compact contract compilation and simulator tests for policy
   boundaries and assertion failures;
@@ -402,10 +410,8 @@ Implemented:
 
 Not yet implemented or verified:
 
-- browser E2E coverage for proof execution, transaction, indexer, and AI
-  journeys when those product surfaces are implemented;
-- real proof generation through Lace's configured proving provider;
-- real proof and transaction lifecycle;
+- one finalized real compliance proof through Lace's configured proving
+  provider, followed by public transaction and ledger inspection;
 - AI API integration; and
 - Devpost submission materials.
 

@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
+import { SucceedEntirely } from "@midnight-ntwrk/midnight-js-types";
 import {
   LaceConnectorError,
+  MidnightLifecycleError,
   VerificationError,
   createLaceConnector,
   createVeilRiskMidnightBinding,
   requestApprovedExplanation,
+  runMidnightCallLifecycle,
   verifyPortfolio,
   verifyPortfolioOnMidnight,
 } from "../lib/verification.ts";
@@ -252,7 +255,7 @@ describe("generated Midnight binding adapter", () => {
     assert.equal(result.status, "finalized");
     assert.deepEqual(states.map(({ status }) => status), [
       "wallet-connection-required",
-      "verifying-on-midnight",
+      "generating-proof",
       "finalized",
     ]);
     assert.deepEqual(calls.map(({ name }) => name), ["connect", "submit"]);
@@ -289,8 +292,8 @@ describe("generated Midnight binding adapter", () => {
     assert.deepEqual(calls, []);
   });
 
-  test("wallet and Midnight failures are explicit and retryable", async () => {
-    for (const [failureKey, expectedStage] of [["connectError", "wallet"], ["submitError", "midnight"]]) {
+  test("wallet and proof-preparation failures are explicit and retryable", async () => {
+    for (const [failureKey, expectedStage] of [["connectError", "wallet"], ["submitError", "proof"]]) {
       const failure = new Error(`${expectedStage} unavailable`);
       const first = createBinding({ [failureKey]: failure });
 
@@ -335,6 +338,91 @@ describe("generated Midnight binding adapter", () => {
       }),
       (error) => error instanceof VerificationError && error.stage === "midnight",
     );
+  });
+});
+
+describe("real Midnight call lifecycle", () => {
+  function createLifecycle(failAt) {
+    const calls = [];
+    const invoke = async (name, result) => {
+      calls.push(name);
+      if (failAt === name) throw new Error("private lifecycle detail");
+      return result;
+    };
+    const providers = {
+      proofProvider: {
+        proveTx: (transaction) => invoke("proof", { proven: transaction }),
+      },
+      walletProvider: {
+        balanceTx: (transaction) => invoke("signature", { balanced: transaction }),
+      },
+      midnightProvider: {
+        submitTx: () => invoke("submission", "public_transaction_id"),
+      },
+      publicDataProvider: {
+        watchForTxData: () => invoke("finalization", {
+          status: SucceedEntirely,
+          identifiers: ["canonical_transaction_id", "public_transaction_id"],
+        }),
+      },
+    };
+    const prepare = () => invoke("prepare", {
+      private: { unprovenTx: { forbiddenAllocation: validAllocation } },
+    });
+    return { calls, prepare, providers };
+  }
+
+  test("proof, Lace approval, submission, and finalization progress in order", async () => {
+    const { calls, prepare, providers } = createLifecycle();
+    const states = [];
+
+    const result = await runMidnightCallLifecycle(
+      providers,
+      prepare,
+      (state) => states.push(state),
+    );
+
+    assert.deepEqual(calls, ["prepare", "proof", "signature", "submission", "finalization"]);
+    assert.deepEqual(states, [
+      { status: "awaiting-signature" },
+      { status: "submitting" },
+      { status: "submitted", transactionId: "public_transaction_id" },
+    ]);
+    assert.deepEqual(result, { public: { txId: "public_transaction_id" } });
+    assert.doesNotMatch(JSON.stringify({ states, result }), /1500|2500|5000|1000/);
+  });
+
+  for (const [failure, stage] of [
+    ["prepare", "proof"],
+    ["proof", "proof"],
+    ["signature", "signature"],
+    ["submission", "submission"],
+    ["finalization", "finalization"],
+  ]) {
+    test(`${failure} failure is classified as ${stage} without exposing its cause`, async () => {
+      const { prepare, providers } = createLifecycle(failure);
+      await assert.rejects(
+        runMidnightCallLifecycle(providers, prepare),
+        (error) => error instanceof MidnightLifecycleError
+          && error.stage === stage
+          && !error.message.includes("private lifecycle detail"),
+      );
+    });
+  }
+
+  test("a mismatched or failed finalized transaction fails closed", async () => {
+    for (const finalized of [
+      { status: "FailEntirely", identifiers: ["public_transaction_id"] },
+      { status: SucceedEntirely, identifiers: ["different_transaction_id"] },
+    ]) {
+      const { prepare, providers } = createLifecycle();
+      providers.publicDataProvider.watchForTxData = async () => finalized;
+      await assert.rejects(
+        runMidnightCallLifecycle(providers, prepare),
+        (error) => error instanceof MidnightLifecycleError
+          && error.stage === "finalization",
+      );
+    }
   });
 });
 

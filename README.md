@@ -15,16 +15,14 @@ public risk mandate without putting the underlying holdings on a public ledger.
 5. Emphasize that the public result reveals the policy and outcome—not the raw
    allocation.
 
-The current browser experience implements a clearly labelled local compliance
-preview through a deterministic policy adapter. Invalid portfolios stop locally
-and never create a shareable preview. `contract/src/veilrisk.compact` contains
-the matching Compact circuit. Both engines run the same shared basis-point
-boundary vectors in tests. A browser-ready adapter now wraps the generated
-contract binding and finalized Midnight.js call while returning only public
-transaction identifiers. The browser now discovers Lace's version 4 connector,
-checks its Preprod configuration, and prepares wallet-delegated proving,
-balancing, submission, and indexer providers without requesting a proof or
-signature during setup.
+The browser experience provides a private local preview and a real Midnight
+verification action. Invalid portfolios stop locally and never reach Lace.
+Valid portfolios using the deployed policy progress through proof generation,
+Lace approval, submission, and Preprod indexer finalization. The public panel
+receives only the policy name, network, contract address, successful transaction
+identifier, and compliance outcome. `contract/src/veilrisk.compact` contains the
+matching Compact circuit, and both engines run the same shared basis-point
+boundary vectors in tests.
 
 ## Privacy boundary
 
@@ -145,9 +143,8 @@ maintenance workflow; the deployed policy is intended to remain fixed.
 
 ## Focused roadmap
 
-- Connect the prepared Lace providers to the browser verification action.
-- Replace the local preview action with the real proof and transaction lifecycle.
-- Expand browser E2E coverage with mocked proof and transaction journeys.
+- Complete one real browser compliance transaction on Preprod and inspect its
+  indexed public state and transaction data.
 - Send only approved policy outcomes to the AI explanation endpoint.
 - Record the required two-minute public demo.
 
@@ -163,11 +160,12 @@ scripts/             Generated-asset preparation and local Preprod deployment
 ```
 
 The verification layer accepts deterministic fakes for routine tests and owns
-the Midnight.js `CompiledContract` and `submitCallTx` details. The pinned
-Midnight runtime dependencies match Compact toolchain 0.31.1. Lace discovery,
-Preprod validation, browser wallet-delegated providers, and a local headless
-deployment command are implemented; an actual verified Preprod receipt remains
-a separate external smoke milestone until the command succeeds on the network.
+the Midnight.js contract preparation, proof, balance/approval, submission, and
+finalization details. The pinned Midnight runtime dependencies match Compact
+toolchain 0.31.1. Lace discovery, Preprod validation, wallet-delegated providers,
+the verified deployed contract, and the browser transaction lifecycle are
+implemented. The first real browser compliance call remains a clearly labelled
+external Preprod smoke milestone until it is finalized and inspected.
 
 This repository is intentionally scoped to a demonstrable privacy boundary. It
 does not execute trades, connect to brokerages, or provide financial advice.

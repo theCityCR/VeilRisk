@@ -25,7 +25,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --force --port 4173",
+    command: "VITE_VEILRISK_E2E=1 npm run dev -- --force --port 4173",
     url: "http://localhost:4173",
     reuseExistingServer: false,
   },

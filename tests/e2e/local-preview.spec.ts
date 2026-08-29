@@ -155,6 +155,41 @@ async function installMockLace(
   }, options);
 }
 
+type MockMidnightStage = "wallet" | "proof" | "signature" | "submission" | "finalization";
+
+async function installMockMidnight(
+  page: import("@playwright/test").Page,
+  options: { failOnceAt?: MockMidnightStage; pauseAt?: Exclude<MockMidnightStage, "wallet"> } = {},
+) {
+  await page.addInitScript(({ failOnceAt, pauseAt }) => {
+    (window as unknown as {
+      __veilriskE2EMidnightController: {
+        calls: string[];
+        failOnceAt?: MockMidnightStage;
+        pauseAt?: Exclude<MockMidnightStage, "wallet">;
+      };
+    }).__veilriskE2EMidnightController = {
+      calls: [],
+      failOnceAt,
+      pauseAt,
+    };
+  }, options);
+}
+
+async function continueMockMidnight(
+  page: import("@playwright/test").Page,
+  currentStage: Exclude<MockMidnightStage, "wallet">,
+  nextStage?: Exclude<MockMidnightStage, "wallet">,
+) {
+  await page.evaluate(({ currentStage, nextStage }) => {
+    const runtime = window as unknown as {
+      __veilriskE2EMidnightController: { pauseAt?: string };
+    };
+    runtime.__veilriskE2EMidnightController.pauseAt = nextStage;
+    window.dispatchEvent(new Event(`veilrisk:e2e:continue:${currentStage}`));
+  }, { currentStage, nextStage });
+}
+
 test("an invalid portfolio fails locally without producing a public artifact", async ({ page }) => {
   const outboundSubmissions: string[] = [];
   page.on("request", (request) => {
@@ -171,10 +206,10 @@ test("an invalid portfolio fails locally without producing a public artifact", a
 
   await expect(privatePanel).toContainText("Needs changes");
   await expect(privatePanel).toContainText("Speculative exposure");
-  await page.getByRole("button", { name: "Create local compliance preview" }).click();
+  await page.getByRole("button", { name: "Create private local preview" }).click();
 
   await expect(page.getByRole("alert")).toContainText("failed locally");
-  await expect(publicPanel).toContainText("No local preview");
+  await expect(publicPanel).toContainText("No attestation");
   await expect(publicPanel).not.toContainText("Speculative exposure");
   await expect(publicPanel).not.toContainText("Policy not satisfied");
   await expect(page).not.toHaveURL(/vr_|allocation|portfolio/i);
@@ -183,36 +218,36 @@ test("an invalid portfolio fails locally without producing a public artifact", a
 
 test("a compliant portfolio creates only an explicitly local preview", async ({ page }) => {
   await openInteractiveApp(page);
-  await page.getByRole("button", { name: "Create local compliance preview" }).click();
+  await page.getByRole("button", { name: "Create private local preview" }).click();
 
   const publicPanel = page.locator(".public-panel");
-  await expect(publicPanel).toContainText("Local preview · not verified on-chain");
+  await expect(publicPanel).toContainText("Private local preview · not on-chain");
   await expect(publicPanel).toContainText("Compliant locally");
   await expect(publicPanel).toContainText("Not submitted");
   await expect(publicPanel).not.toContainText("Midnight Preprod");
   await expect(publicPanel).not.toContainText(/vr_[a-z0-9]+/i);
-  await expect(page.getByText("Local preview", { exact: true })).toBeVisible();
+  await expect(page.getByText("Private preview · not public", { exact: true })).toBeVisible();
 });
 
 test("editing private input clears a stale local preview", async ({ page }) => {
   await openInteractiveApp(page);
-  await page.getByRole("button", { name: "Create local compliance preview" }).click();
+  await page.getByRole("button", { name: "Create private local preview" }).click();
   await expect(page.locator(".public-panel")).toContainText("Compliant locally");
 
   await page.getByRole("slider", { name: "Cash" }).fill("1600");
 
-  await expect(page.locator(".public-panel")).toContainText("No local preview");
+  await expect(page.locator(".public-panel")).toContainText("No attestation");
   await expect(page.locator(".private-panel")).toContainText("Needs changes");
 });
 
 test("changing the public policy clears a stale local preview", async ({ page }) => {
   await openInteractiveApp(page);
-  await page.getByRole("button", { name: "Create local compliance preview" }).click();
+  await page.getByRole("button", { name: "Create private local preview" }).click();
   await expect(page.locator(".public-panel")).toContainText("Compliant locally");
 
   await page.getByLabel("Speculative cap").selectOption("1000");
 
-  await expect(page.locator(".public-panel")).toContainText("No local preview");
+  await expect(page.locator(".public-panel")).toContainText("No attestation");
 });
 
 test("shared default-policy boundary vectors match the browser result", async ({ page }) => {
@@ -227,13 +262,13 @@ test("shared default-policy boundary vectors match the browser result", async ({
 
     const privatePanel = page.locator(".private-panel");
     await expect(privatePanel).toContainText(vector.passed ? "Ready" : "Needs changes");
-    await page.getByRole("button", { name: "Create local compliance preview" }).click();
+    await page.getByRole("button", { name: "Create private local preview" }).click();
 
     if (vector.passed) {
       await expect(page.locator(".public-panel")).toContainText("Compliant locally");
     } else {
       await expect(page.getByRole("alert")).toContainText("failed locally");
-      await expect(page.locator(".public-panel")).toContainText("No local preview");
+      await expect(page.locator(".public-panel")).toContainText("No attestation");
     }
   }
 });
@@ -257,7 +292,7 @@ test("both presets work with keyboard controls and the viewport does not overflo
   await expect(cash).toHaveValue("1501");
   await page.keyboard.press("ArrowLeft");
 
-  const previewButton = page.getByRole("button", { name: "Create local compliance preview" });
+  const previewButton = page.getByRole("button", { name: "Create private local preview" });
   await previewButton.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".public-panel")).toContainText("Compliant locally");
@@ -273,13 +308,13 @@ test("refresh and a fresh browser session restore no private or preview state", 
   await openInteractiveApp(page);
   await page.getByRole("slider", { name: "Cash" }).fill("1501");
   await page.getByRole("slider", { name: "Bonds" }).fill("2499");
-  await page.getByRole("button", { name: "Create local compliance preview" }).click();
+  await page.getByRole("button", { name: "Create private local preview" }).click();
   await expect(page.locator(".public-panel")).toContainText("Compliant locally");
 
   await page.reload();
   await page.waitForFunction(() => typeof document.querySelector<HTMLButtonElement>(".prove-button")?.onclick === "function");
   await expect(page.getByRole("slider", { name: "Cash" })).toHaveValue("1500");
-  await expect(page.locator(".public-panel")).toContainText("No local preview");
+  await expect(page.locator(".public-panel")).toContainText("No attestation");
 
   const stored = await page.evaluate(() => ({
     local: { ...localStorage },
@@ -290,7 +325,7 @@ test("refresh and a fresh browser session restore no private or preview state", 
   const freshPage = await context.newPage();
   await openInteractiveApp(freshPage);
   await expect(freshPage.getByRole("slider", { name: "Cash" })).toHaveValue("1500");
-  await expect(freshPage.locator(".public-panel")).toContainText("No local preview");
+  await expect(freshPage.locator(".public-panel")).toContainText("No attestation");
   await freshPage.close();
 });
 
@@ -301,7 +336,7 @@ test("private allocations stay out of URLs, storage, and the shareable panel", a
 
   await page.getByRole("slider", { name: "Cash" }).fill("1501");
   await page.getByRole("slider", { name: "Bonds" }).fill("2499");
-  await page.getByRole("button", { name: "Create local compliance preview" }).click();
+  await page.getByRole("button", { name: "Create private local preview" }).click();
 
   const publicText = await page.locator(".public-panel").innerText();
   const storageText = await page.evaluate(() => JSON.stringify({
@@ -337,8 +372,8 @@ test("wallet authorization rejection can be retried successfully", async ({ page
 
   await walletSetup.getByRole("button", { name: "Retry Lace connection" }).click();
   await expect(walletSetup.getByRole("status")).toContainText("Lace Test Wallet connected");
-  await expect(walletSetup).toContainText("Wallet-delegated proving is configured");
-  await expect(walletSetup).toContainText("No proof or transaction has been requested");
+  await expect(walletSetup).toContainText("Wallet-delegated proving is ready");
+  await expect(walletSetup).toContainText("signature is requested only after a valid proof");
   await expect(page).not.toHaveURL(/wallet|address|private/i);
 });
 
@@ -371,6 +406,121 @@ test("a disconnected Lace session fails closed and reconnects", async ({ page })
   await walletSetup.getByRole("button", { name: "Retry Lace connection" }).click();
   await expect(walletSetup.getByRole("status")).toContainText("Lace Test Wallet connected");
 });
+
+test("invalid input and an undeployed policy never reach the Midnight verification adapter", async ({ page }) => {
+  await installMockMidnight(page);
+  await openInteractiveApp(page);
+
+  await page.getByRole("button", { name: "Risky demo" }).click();
+  await page.getByRole("button", { name: "Verify privately on Preprod" }).click();
+  await expect(page.getByRole("alert")).toContainText("failed locally");
+
+  let calls = await page.evaluate(() => (
+    window as unknown as { __veilriskE2EMidnightController: { calls: string[] } }
+  ).__veilriskE2EMidnightController.calls);
+  expect(calls).toEqual([]);
+
+  await page.getByRole("button", { name: "Balanced demo" }).click();
+  await page.getByLabel("Speculative cap").selectOption("3000");
+  await page.getByRole("button", { name: "Verify privately on Preprod" }).click();
+  await expect(page.getByRole("alert")).toContainText("uses the deployed 20% policy");
+  calls = await page.evaluate(() => (
+    window as unknown as { __veilriskE2EMidnightController: { calls: string[] } }
+  ).__veilriskE2EMidnightController.calls);
+  expect(calls).toEqual([]);
+  await expect(page.locator(".public-panel")).not.toContainText("Compliant on-chain");
+});
+
+test("a real verification progresses through proof, Lace approval, submission, and finalization", async ({ page }) => {
+  const outboundSubmissions: string[] = [];
+  page.on("request", (request) => {
+    if (!( ["GET", "HEAD"] as string[]).includes(request.method())) {
+      outboundSubmissions.push(`${request.method()} ${request.url()}`);
+    }
+  });
+  await installMockMidnight(page, { pauseAt: "proof" });
+  await openInteractiveApp(page);
+
+  await page.getByRole("button", { name: "Verify privately on Preprod" }).click();
+  await expect(page.locator(".public-panel")).toContainText("Generating zero-knowledge proof");
+  await expect(page.getByRole("slider", { name: "Cash" })).toBeDisabled();
+
+  await continueMockMidnight(page, "proof", "signature");
+  await expect(page.locator(".public-panel")).toContainText("Approve the transaction in Lace");
+
+  await continueMockMidnight(page, "signature", "submission");
+  await expect(page.locator(".public-panel")).toContainText("Submitting to Midnight Preprod");
+
+  await continueMockMidnight(page, "submission", "finalization");
+  await expect(page.locator(".public-panel")).toContainText("awaiting Preprod finalization");
+  await expect(page.locator(".public-panel")).toContainText("public_compliance_transaction_id");
+
+  await continueMockMidnight(page, "finalization");
+  const publicPanel = page.locator(".public-panel");
+  await expect(publicPanel).toContainText("Verified on Midnight Preprod");
+  await expect(publicPanel).toContainText("Compliant on-chain");
+  await expect(publicPanel).toContainText("3e3ab54fd9383a11b457cc48b73e084db0aaf63ad3499c149cc1b43e1cf4e4f6");
+  await expect(publicPanel).toContainText("public_compliance_transaction_id");
+  await expect(publicPanel).toContainText("Holdings disclosed");
+  await expect(publicPanel).toContainText("None");
+
+  const publicText = await publicPanel.innerText();
+  for (const prohibitedValue of ["1500", "2500", "5000", "1000", "15%", "25%", "50%", "10%"] ) {
+    expect(publicText).not.toContain(prohibitedValue);
+    expect(page.url()).not.toContain(prohibitedValue);
+  }
+  const browserState = await page.evaluate(() => {
+    const controller = (
+      window as unknown as {
+        __veilriskE2EMidnightController: {
+          calls: string[];
+          privateInput: { allocation: Record<string, number> };
+        };
+      }
+    ).__veilriskE2EMidnightController;
+    return {
+      calls: controller.calls,
+      privateInput: controller.privateInput,
+      storage: JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+    };
+  });
+  expect(browserState.calls).toEqual(["wallet", "proof", "signature", "submission", "finalization"]);
+  expect(browserState.privateInput.allocation).toEqual({
+    cash: 1500,
+    bonds: 2500,
+    equities: 5000,
+    speculative: 1000,
+  });
+  expect(browserState.storage).not.toMatch(/1500|2500|5000|1000/);
+  expect(outboundSubmissions).toEqual([]);
+
+  await page.getByRole("slider", { name: "Cash" }).fill("1501");
+  await expect(publicPanel).toContainText("No attestation");
+  await expect(publicPanel).not.toContainText("public_compliance_transaction_id");
+});
+
+for (const [stage, message] of [
+  ["proof", "Proof generation failed"],
+  ["signature", "did not approve the transaction"],
+  ["submission", "could not be submitted"],
+  ["finalization", "could not be confirmed by the Preprod indexer"],
+] as const) {
+  test(`${stage} failure is public-safe and a retry can finalize`, async ({ page }) => {
+    await installMockMidnight(page, { failOnceAt: stage });
+    await openInteractiveApp(page);
+
+    await page.getByRole("button", { name: "Verify privately on Preprod" }).click();
+    const publicPanel = page.locator(".public-panel");
+    await expect(publicPanel.getByRole("alert")).toContainText(message);
+    await expect(publicPanel).not.toContainText("Private deterministic E2E failure detail");
+    if (stage === "finalization") {
+      await expect(publicPanel).toContainText("public_compliance_transaction_id");
+    }
+
+    await page.getByRole("button", { name: "Retry on-chain verification" }).click();
+    await expect(publicPanel).toContainText("Compliant on-chain");
+  });
+}
 
 test("the deployment surface exposes only the fixed public policy and fails safely without Lace", async ({ page }) => {
   const outboundSubmissions: string[] = [];

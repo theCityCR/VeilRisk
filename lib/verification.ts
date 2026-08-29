@@ -2,11 +2,12 @@ import { ErrorCodes, type ConnectedAPI, type InitialAPI } from "@midnight-ntwrk/
 import { FetchZkConfigProvider } from "@midnight-ntwrk/midnight-js-fetch-zk-config-provider";
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
 import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
-import { submitCallTx } from "@midnight-ntwrk/midnight-js-contracts";
+import { createUnprovenCallTx } from "@midnight-ntwrk/midnight-js-contracts";
 import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
 import * as midnightLedger from "@midnight-ntwrk/midnight-js-protocol/ledger";
 import {
   createProofProvider,
+  SucceedEntirely,
   type MidnightProvider,
   type WalletProvider,
 } from "@midnight-ntwrk/midnight-js-types";
@@ -65,6 +66,11 @@ type MidnightProviders = object;
 type FinalizedMidnightCall = Readonly<{
   public: Readonly<{ txId: string }>;
 }>;
+export type MidnightLifecycleState =
+  | Readonly<{ status: "generating-proof" }>
+  | Readonly<{ status: "awaiting-signature" }>
+  | Readonly<{ status: "submitting" }>
+  | Readonly<{ status: "submitted"; transactionId: string }>;
 type MidnightCallOptions = Readonly<{
   compiledContract: object;
   contractAddress: string;
@@ -74,6 +80,7 @@ type MidnightCallOptions = Readonly<{
 type SubmitMidnightCall = (
   providers: MidnightProviders,
   options: MidnightCallOptions,
+  onState: (state: MidnightLifecycleState) => void,
 ) => Promise<FinalizedMidnightCall>;
 
 export type LaceFailureReason =
@@ -114,6 +121,7 @@ export type MidnightBindingPort = Readonly<{
   submitCompliance: (
     providers: MidnightProviders,
     input: Readonly<{ allocation: Allocation; policy: RiskPolicy }>,
+    onState?: (state: MidnightLifecycleState) => void,
   ) => Promise<FinalizedTransaction>;
 }>;
 
@@ -129,10 +137,7 @@ export type ExternalStage = "wallet" | "proof" | "signature" | "submission" | "f
 export type VerificationState =
   | Readonly<{ status: "invalid-locally"; failureIds: readonly string[] }>
   | Readonly<{ status: "wallet-connection-required" }>
-  | Readonly<{ status: "generating-proof" }>
-  | Readonly<{ status: "verifying-on-midnight" }>
-  | Readonly<{ status: "awaiting-signature" }>
-  | Readonly<{ status: "submitted"; transactionId: string }>
+  | MidnightLifecycleState
   | Readonly<{ status: "finalized"; attestation: PublicAttestation }>
   | Readonly<{ status: "failed"; stage: ExternalStage }>;
 
@@ -146,6 +151,19 @@ export class VerificationError extends Error {
   constructor(stage: ExternalStage, cause: unknown) {
     super(`Verification failed during ${stage}.`, { cause });
     this.name = "VerificationError";
+    this.stage = stage;
+  }
+}
+
+export class MidnightLifecycleError extends Error {
+  readonly stage: "proof" | "signature" | "submission" | "finalization";
+
+  constructor(
+    stage: "proof" | "signature" | "submission" | "finalization",
+    cause: unknown,
+  ) {
+    super(`Midnight transaction failed during ${stage}.`, { cause });
+    this.name = "MidnightLifecycleError";
     this.stage = stage;
   }
 }
@@ -434,6 +452,7 @@ function findLaceConnectorError(cause: unknown, depth = 0): LaceConnectorError |
 }
 
 function stageForMidnightFailure(cause: unknown): ExternalStage {
+  if (cause instanceof MidnightLifecycleError) return cause.stage;
   switch (findLaceConnectorError(cause)?.reason) {
     case "signature-rejected":
       return "signature";
@@ -448,6 +467,28 @@ function stageForMidnightFailure(cause: unknown): ExternalStage {
   }
 }
 
+export function getVerificationFailureMessage(cause: unknown) {
+  const laceError = findLaceConnectorError(cause);
+  if (laceError) return getLaceFailureMessage(laceError.reason);
+
+  const stage = cause instanceof VerificationError ? cause.stage : "midnight";
+  switch (stage) {
+    case "proof":
+      return "Proof generation failed. Check Lace's proving service and retry. No transaction was submitted.";
+    case "signature":
+      return "Lace did not approve the transaction. No transaction was submitted; you can retry.";
+    case "submission":
+      return "The transaction could not be submitted. Check Lace and your tDUST balance, then retry.";
+    case "finalization":
+    case "indexer":
+      return "The transaction was submitted but could not be confirmed by the Preprod indexer. Keep the transaction ID shown and retry inspection.";
+    case "wallet":
+      return "Lace could not be connected. Check the wallet and retry.";
+    default:
+      return "Midnight could not prepare the compliance transaction. No verified attestation was produced.";
+  }
+}
+
 function requirePublicIdentifier(value: string, label: string) {
   const normalized = value.trim();
   if (normalized.length === 0) {
@@ -456,12 +497,67 @@ function requirePublicIdentifier(value: string, label: string) {
   return normalized;
 }
 
-const submitGeneratedCall: SubmitMidnightCall = async (providers, options) => {
-  const result = await submitCallTx(
-    providers as never,
-    options as never,
-  ) as FinalizedMidnightCall;
-  return result;
+type PreparedMidnightCall = Readonly<{ private: Readonly<{ unprovenTx: unknown }> }>;
+type LifecycleProviders = Readonly<{
+  proofProvider: Readonly<{ proveTx: (transaction: never) => Promise<unknown> }>;
+  walletProvider: Readonly<{ balanceTx: (transaction: never) => Promise<unknown> }>;
+  midnightProvider: Readonly<{ submitTx: (transaction: never) => Promise<string> }>;
+  publicDataProvider: Readonly<{
+    watchForTxData: (transactionId: string) => Promise<Readonly<{
+      status: unknown;
+      identifiers: readonly string[];
+    }>>;
+  }>;
+}>;
+
+export async function runMidnightCallLifecycle(
+  providers: LifecycleProviders,
+  prepare: () => Promise<PreparedMidnightCall>,
+  onState: (state: MidnightLifecycleState) => void = () => {},
+): Promise<FinalizedMidnightCall> {
+  let stage: MidnightLifecycleError["stage"] = "proof";
+  try {
+    const prepared = await prepare();
+    const proven = await providers.proofProvider.proveTx(
+      prepared.private.unprovenTx as never,
+    );
+
+    stage = "signature";
+    onState({ status: "awaiting-signature" });
+    const balanced = await providers.walletProvider.balanceTx(proven as never);
+
+    stage = "submission";
+    onState({ status: "submitting" });
+    const transactionId = requirePublicIdentifier(
+      await providers.midnightProvider.submitTx(balanced as never),
+      "Transaction ID",
+    );
+    onState({ status: "submitted", transactionId });
+
+    stage = "finalization";
+    const finalized = await providers.publicDataProvider.watchForTxData(transactionId);
+    if (
+      finalized.status !== SucceedEntirely
+      || !finalized.identifiers.includes(transactionId)
+    ) {
+      throw new Error("Indexer did not confirm a successful matching transaction.");
+    }
+    return { public: { txId: transactionId } };
+  } catch (cause) {
+    if (cause instanceof MidnightLifecycleError) throw cause;
+    throw new MidnightLifecycleError(stage, cause);
+  }
+}
+
+const submitGeneratedCall: SubmitMidnightCall = async (providers, options, onState) => {
+  return await runMidnightCallLifecycle(
+    providers as LifecycleProviders,
+    async () => await createUnprovenCallTx(
+      providers as never,
+      options as never,
+    ) as PreparedMidnightCall,
+    onState,
+  );
 };
 
 export function createVeilRiskMidnightBinding(
@@ -484,22 +580,39 @@ export function createVeilRiskMidnightBinding(
 
   return {
     connect: config.connect,
-    async submitCompliance(providers, input) {
+    async submitCompliance(providers, input, onState = () => {}) {
       if (!evaluatePortfolio(input.allocation, input.policy).passed) {
         throw new RangeError("Invalid portfolios cannot be submitted to Midnight.");
       }
 
-      const finalized = await submit(providers, {
-        compiledContract,
-        contractAddress,
-        circuitId: "proveCompliance",
-        args: [
-          BigInt(input.allocation.cash),
-          BigInt(input.allocation.bonds),
-          BigInt(input.allocation.equities),
-          BigInt(input.allocation.speculative),
-        ],
-      });
+      let stage: MidnightLifecycleError["stage"] = "proof";
+      const forwardState = (state: MidnightLifecycleState) => {
+        if (state.status === "awaiting-signature") stage = "signature";
+        if (state.status === "submitting") stage = "submission";
+        if (state.status === "submitted") stage = "finalization";
+        onState(state);
+      };
+
+      onState({ status: "generating-proof" });
+      let finalized: FinalizedMidnightCall;
+      try {
+        finalized = await submit(providers, {
+          compiledContract,
+          contractAddress,
+          circuitId: "proveCompliance",
+          args: [
+            BigInt(input.allocation.cash),
+            BigInt(input.allocation.bonds),
+            BigInt(input.allocation.equities),
+            BigInt(input.allocation.speculative),
+          ],
+        }, forwardState);
+      } catch (cause) {
+        if (cause instanceof MidnightLifecycleError || cause instanceof LaceConnectorError) {
+          throw cause;
+        }
+        throw new MidnightLifecycleError(stage, cause);
+      }
 
       return {
         transactionId: requirePublicIdentifier(finalized.public.txId, "Transaction ID"),
@@ -535,8 +648,7 @@ export async function verifyPortfolioOnMidnight(
   }
 
   try {
-    onState({ status: "verifying-on-midnight" });
-    const transaction = await midnight.submitCompliance(providers, input);
+    const transaction = await midnight.submitCompliance(providers, input, onState);
     const attestation: PublicAttestation = {
       transactionId: transaction.transactionId,
       policyName: input.policyName,
