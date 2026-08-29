@@ -1,0 +1,12 @@
+{
+  "network": "preprod",
+  "policyName": "Conservative mandate",
+  "policy": {
+    "maxSpeculative": 2000,
+    "maxGrowth": 7000,
+    "maxSingleBucket": 6000
+  },
+  "contractAddress": null,
+  "deploymentTransactionId": null,
+  "publicStateVerified": false
+}

@@ -9,6 +9,18 @@ const allocationLabels = {
 };
 const browserIssues = new WeakMap<import("@playwright/test").Page, string[]>();
 
+async function attemptDeploymentWithoutLace(page: import("@playwright/test").Page) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const button = page.getByRole("button", { name: "Connect Lace and deploy" });
+    await button.waitFor();
+    const deploymentReloaded = page.waitForEvent("framenavigated").then(() => "reloaded" as const);
+    const deploymentUnavailable = page.getByRole("alert").waitFor({ timeout: 30_000 }).then(() => "failed" as const);
+    await button.click();
+    if (await Promise.race([deploymentReloaded, deploymentUnavailable]) === "failed") return;
+  }
+  throw new Error("The deployment page kept reloading while preparing the Midnight SDK.");
+}
+
 test.beforeAll(async ({ browser }) => {
   // The Vinext development server performs one full reload when the lazily
   // loaded Midnight SDK is transformed for the first time. Warm that module
@@ -26,6 +38,9 @@ test.beforeAll(async ({ browser }) => {
     await page.getByRole("button", { name: "Connect Lace" }).click();
     await page.getByRole("alert").waitFor();
   }
+
+  await page.goto("/deploy");
+  await attemptDeploymentWithoutLace(page);
   await page.close();
 });
 
@@ -51,6 +66,23 @@ async function openInteractiveApp(page: import("@playwright/test").Page) {
   } catch {
     throw new Error(`The application did not become interactive: ${issues.join(" | ") || "no browser error was reported"}`);
   }
+  expect(issues).toEqual([]);
+}
+
+async function openDeploymentPage(page: import("@playwright/test").Page) {
+  const issues: string[] = [];
+  browserIssues.set(page, issues);
+  page.on("console", (message) => {
+    if (message.type() === "error") issues.push(message.text());
+  });
+  page.on("pageerror", (error) => issues.push(error.message));
+  page.on("requestfailed", (request) => issues.push(`Request failed: ${request.method()} ${request.url()}`));
+  page.on("response", (response) => {
+    if (response.status() >= 500) issues.push(`Unexpected response: ${response.status()} ${response.url()}`);
+  });
+
+  await page.goto("/deploy");
+  await page.getByRole("button", { name: "Connect Lace and deploy" }).waitFor();
   expect(issues).toEqual([]);
 }
 
@@ -337,4 +369,26 @@ test("a disconnected Lace session fails closed and reconnects", async ({ page })
 
   await walletSetup.getByRole("button", { name: "Retry Lace connection" }).click();
   await expect(walletSetup.getByRole("status")).toContainText("Lace Test Wallet connected");
+});
+
+test("the deployment surface exposes only the fixed public policy and fails safely without Lace", async ({ page }) => {
+  const outboundSubmissions: string[] = [];
+  page.on("request", (request) => {
+    if (!( ["GET", "HEAD"] as string[]).includes(request.method())) {
+      outboundSubmissions.push(`${request.method()} ${request.url()}`);
+    }
+  });
+
+  await openDeploymentPage(page);
+  await expect(page.getByLabel("Policy to deploy")).toContainText("20%");
+  await expect(page.getByLabel("Policy to deploy")).toContainText("70%");
+  await expect(page.getByLabel("Policy to deploy")).toContainText("60%");
+  await expect(page.locator("main")).toContainText("No portfolio allocation is used");
+  await expect(page.locator("main")).not.toContainText(/cash|bonds|equities|wallet address|signing key/i);
+
+  await attemptDeploymentWithoutLace(page);
+  await expect(page.getByRole("alert")).toContainText("No verified deployment was produced", { timeout: 20_000 });
+  await expect(page.getByLabel("Public deployment receipt")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry deployment" })).toBeEnabled();
+  expect(outboundSubmissions).toEqual([]);
 });

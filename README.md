@@ -83,9 +83,23 @@ delegates proving to the provider selected in the wallet; real proof generation
 and submission still require reachable Preprod services and a deployed VeilRisk
 contract.
 
+## Deploy the policy contract on Preprod
+
+Start the app, then open `http://localhost:3000/deploy` in a browser where Lace
+is installed and configured for Preprod. The operator page deploys the fixed
+Conservative mandate (20% speculative, 70% growth, and 60% concentration), then
+reads the indexed ledger state back before reporting success.
+
+The page exposes only the public network, contract address, deployment
+transaction ID, and policy. It never logs or serializes the SDK deployment
+object because that object also contains private wallet and maintenance data.
+After a successful deployment, copy the public receipt into
+`config/preprod-deployment.json` and commit that public record. Never add wallet
+keys, addresses, witness data, or SDK diagnostic objects to the file.
+
 ## Focused roadmap
 
-- Deploy/join the risk-policy contract on Preprod.
+- Complete the prepared Lace deployment at `/deploy` and record its verified public receipt.
 - Connect the prepared Lace providers to the browser verification action.
 - Replace the local preview action with the real proof and transaction lifecycle.
 - Expand browser E2E coverage with mocked proof and transaction journeys.

@@ -25,5 +25,7 @@ npm test
 The browser uses integer basis points and a deterministic local adapter with the
 same policy rules. TypeScript and the generated Compact simulator execute one
 shared set of success, failure, exact-cap, and one-basis-point boundary vectors.
-The next milestone is replacing the local adapter with the generated Midnight
-contract bindings and Lace wallet flow.
+The generated Midnight binding and Lace wallet provider setup are implemented.
+The repository-level `/deploy` operator page is the supported path for the
+one-time Preprod deployment; the public receipt remains pending until that real
+wallet-approved transaction finalizes.
