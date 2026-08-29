@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
 import {
   VerificationError,
+  createVeilRiskMidnightBinding,
   requestApprovedExplanation,
   verifyPortfolio,
+  verifyPortfolioOnMidnight,
 } from "../lib/verification.ts";
 import { defaultPolicy } from "./fixtures/policy-vectors.mjs";
 
@@ -194,5 +197,141 @@ describe("injectable verification workflow", () => {
 
     await assert.rejects(requestApprovedExplanation(ai, packet), /AI unavailable/);
     assert.equal(await requestApprovedExplanation(ai, packet), "Recovered explanation");
+  });
+});
+
+describe("generated Midnight binding adapter", () => {
+  function createBinding(overrides = {}) {
+    const calls = [];
+    const providers = Object.freeze({ kind: "connected-midnight-providers" });
+    const binding = createVeilRiskMidnightBinding({
+      network: "Preprod",
+      contractAddress: "contract_public_address",
+      compiledAssetsBaseUrl: "https://veilrisk.example/contract/veilrisk/",
+      connect: async () => {
+        calls.push({ name: "connect" });
+        if (overrides.connectError) throw overrides.connectError;
+        return providers;
+      },
+      submit: async (receivedProviders, options) => {
+        calls.push({ name: "submit", receivedProviders, options });
+        if (overrides.submitError) throw overrides.submitError;
+        return { public: { txId: "midnight_finalized_transaction" } };
+      },
+    });
+    return { binding, calls, providers };
+  }
+
+  test("invalid input never connects to a wallet or invokes Midnight", async () => {
+    const { binding, calls } = createBinding();
+    const states = [];
+
+    const result = await verifyPortfolioOnMidnight(binding, {
+      allocation: { ...validAllocation, cash: 1_499 },
+      policy: defaultPolicy,
+      policyName: "Conservative mandate",
+    }, (state) => states.push(state));
+
+    assert.deepEqual(result, { status: "invalid-locally", failureIds: ["total"] });
+    assert.deepEqual(states, [{ status: "invalid-locally", failureIds: ["total"] }]);
+    assert.deepEqual(calls, []);
+  });
+
+  test("the binding submits private circuit arguments through the generated contract", async () => {
+    const { binding, calls, providers } = createBinding();
+    const states = [];
+
+    const result = await verifyPortfolioOnMidnight(binding, {
+      allocation: validAllocation,
+      policy: defaultPolicy,
+      policyName: "Conservative mandate",
+    }, (state) => states.push(state));
+
+    assert.equal(result.status, "finalized");
+    assert.deepEqual(states.map(({ status }) => status), [
+      "wallet-connection-required",
+      "verifying-on-midnight",
+      "finalized",
+    ]);
+    assert.deepEqual(calls.map(({ name }) => name), ["connect", "submit"]);
+
+    const submission = calls[1];
+    assert.equal(submission.receivedProviders, providers);
+    assert.equal(submission.options.compiledContract.tag, "VeilRisk");
+    assert.equal(
+      CompiledContract.getCompiledAssetsPath(submission.options.compiledContract),
+      "https://veilrisk.example/contract/veilrisk",
+    );
+    assert.equal(submission.options.circuitId, "proveCompliance");
+    assert.equal(submission.options.contractAddress, "contract_public_address");
+    assert.deepEqual(submission.options.args, [1_500n, 2_500n, 5_000n, 1_000n]);
+    assert.equal(JSON.stringify(result).includes("1500"), false);
+    assert.equal(JSON.stringify(result).includes("2500"), false);
+    assert.deepEqual(result.transaction, {
+      transactionId: "midnight_finalized_transaction",
+      network: "Preprod",
+      contractAddress: "contract_public_address",
+    });
+  });
+
+  test("the binding itself fails closed before SDK submission for invalid input", async () => {
+    const { binding, calls, providers } = createBinding();
+
+    await assert.rejects(
+      binding.submitCompliance(providers, {
+        allocation: { ...validAllocation, speculative: 2_001, cash: 499 },
+        policy: defaultPolicy,
+      }),
+      /cannot be submitted/,
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  test("wallet and Midnight failures are explicit and retryable", async () => {
+    for (const [failureKey, expectedStage] of [["connectError", "wallet"], ["submitError", "midnight"]]) {
+      const failure = new Error(`${expectedStage} unavailable`);
+      const first = createBinding({ [failureKey]: failure });
+
+      await assert.rejects(
+        verifyPortfolioOnMidnight(first.binding, {
+          allocation: validAllocation,
+          policy: defaultPolicy,
+          policyName: "Conservative mandate",
+        }),
+        (error) => error instanceof VerificationError && error.stage === expectedStage,
+      );
+
+      const retry = createBinding();
+      assert.equal((await verifyPortfolioOnMidnight(retry.binding, {
+        allocation: validAllocation,
+        policy: defaultPolicy,
+        policyName: "Conservative mandate",
+      })).status, "finalized");
+    }
+  });
+
+  test("empty public configuration and transaction identifiers fail closed", async () => {
+    assert.throws(() => createVeilRiskMidnightBinding({
+      network: " ",
+      contractAddress: "contract_public_address",
+      compiledAssetsBaseUrl: "https://veilrisk.example/contract/veilrisk",
+      connect: async () => ({}),
+    }), /network must not be empty/i);
+
+    const binding = createVeilRiskMidnightBinding({
+      network: "Preprod",
+      contractAddress: "contract_public_address",
+      compiledAssetsBaseUrl: "https://veilrisk.example/contract/veilrisk",
+      connect: async () => ({}),
+      submit: async () => ({ public: { txId: "" } }),
+    });
+    await assert.rejects(
+      verifyPortfolioOnMidnight(binding, {
+        allocation: validAllocation,
+        policy: defaultPolicy,
+        policyName: "Conservative mandate",
+      }),
+      (error) => error instanceof VerificationError && error.stage === "midnight",
+    );
   });
 });

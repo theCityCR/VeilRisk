@@ -177,8 +177,8 @@ speed but is not the source of public verification.
 inputs. It exposes policy limits as public state and permits a successful
 transaction only if every policy assertion passes.
 
-The initial contract source is a draft until it has been compiled and tested
-with the supported Compact toolchain.
+The contract compiles and its generated simulator passes shared boundary tests
+with the supported Compact toolchain. Real network execution is still pending.
 
 #### Midnight integration adapter
 
@@ -371,6 +371,10 @@ Implemented:
 - injectable wallet, proof-provider, transaction, indexer, and AI ports with a
   deterministic orchestration suite covering local short-circuiting, lifecycle
   order, dependency failures, retry recovery, and disclosure filtering;
+- a browser-ready Midnight.js 4.1.1 adapter that wraps the generated Compact
+  binding, serves generated ZK assets from an ignored build path, submits the
+  typed `proveCompliance` private inputs, and returns only public transaction
+  identifiers;
 - public-safe explanation copy;
 - verified Compact contract compilation and simulator tests for policy
   boundaries and assertion failures;
@@ -381,8 +385,8 @@ Not yet implemented or verified:
 
 - browser E2E coverage for wallet, proof-provider, transaction, indexer, and AI
   journeys when those product surfaces are implemented;
-- browser integration of the generated contract bindings;
-- Lace wallet connection;
+- Lace wallet discovery, connection, and provider creation for the
+  generated-binding adapter;
 - proof server configuration;
 - deployment to a Midnight network;
 - real proof and transaction lifecycle;

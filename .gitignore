@@ -15,6 +15,7 @@ node_modules/
 /playwright-report/
 /test-results/
 **/reports/
+/public/contract/veilrisk/
 
 # next.js
 /.next/

@@ -1,3 +1,6 @@
+import { submitCallTx } from "@midnight-ntwrk/midnight-js-contracts";
+import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
+import { Contract as VeilRiskContract } from "../contract/src/managed/veilrisk/contract/index.js";
 import { evaluatePortfolio, type Allocation, type RiskPolicy } from "./risk.ts";
 
 export type ProofArtifact = Readonly<{ opaqueProof: string }>;
@@ -47,11 +50,44 @@ export type VerificationPorts = Readonly<{
   ai: AiExplanationPort;
 }>;
 
-export type ExternalStage = "wallet" | "proof" | "signature" | "submission" | "finalization" | "indexer";
+type VeilRiskGeneratedContract = VeilRiskContract<undefined>;
+type MidnightProviders = object;
+type FinalizedMidnightCall = Readonly<{
+  public: Readonly<{ txId: string }>;
+}>;
+type MidnightCallOptions = Readonly<{
+  compiledContract: object;
+  contractAddress: string;
+  circuitId: "proveCompliance";
+  args: readonly [bigint, bigint, bigint, bigint];
+}>;
+type SubmitMidnightCall = (
+  providers: MidnightProviders,
+  options: MidnightCallOptions,
+) => Promise<FinalizedMidnightCall>;
+
+export type MidnightBindingPort = Readonly<{
+  connect: () => Promise<MidnightProviders>;
+  submitCompliance: (
+    providers: MidnightProviders,
+    input: Readonly<{ allocation: Allocation; policy: RiskPolicy }>,
+  ) => Promise<FinalizedTransaction>;
+}>;
+
+export type MidnightBindingConfig = Readonly<{
+  network: string;
+  contractAddress: string;
+  compiledAssetsBaseUrl: string;
+  connect: () => Promise<MidnightProviders>;
+  submit?: SubmitMidnightCall;
+}>;
+
+export type ExternalStage = "wallet" | "proof" | "signature" | "submission" | "finalization" | "indexer" | "midnight";
 export type VerificationState =
   | Readonly<{ status: "invalid-locally"; failureIds: readonly string[] }>
   | Readonly<{ status: "wallet-connection-required" }>
   | Readonly<{ status: "generating-proof" }>
+  | Readonly<{ status: "verifying-on-midnight" }>
   | Readonly<{ status: "awaiting-signature" }>
   | Readonly<{ status: "submitted"; transactionId: string }>
   | Readonly<{ status: "finalized"; attestation: PublicAttestation }>
@@ -68,6 +104,109 @@ export class VerificationError extends Error {
     super(`Verification failed during ${stage}.`, { cause });
     this.name = "VerificationError";
     this.stage = stage;
+  }
+}
+
+function requirePublicIdentifier(value: string, label: string) {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    throw new TypeError(`${label} must not be empty.`);
+  }
+  return normalized;
+}
+
+const submitGeneratedCall: SubmitMidnightCall = async (providers, options) => {
+  const result = await submitCallTx(
+    providers as never,
+    options as never,
+  ) as FinalizedMidnightCall;
+  return result;
+};
+
+export function createVeilRiskMidnightBinding(
+  config: MidnightBindingConfig,
+): MidnightBindingPort {
+  const network = requirePublicIdentifier(config.network, "Midnight network");
+  const contractAddress = requirePublicIdentifier(config.contractAddress, "Contract address");
+  const compiledAssetsBaseUrl = requirePublicIdentifier(
+    config.compiledAssetsBaseUrl,
+    "Compiled asset base URL",
+  ).replace(/\/$/, "");
+  const submit = config.submit ?? submitGeneratedCall;
+  const compiledContract = CompiledContract.make<VeilRiskGeneratedContract>(
+    "VeilRisk",
+    VeilRiskContract,
+  ).pipe(
+    CompiledContract.withVacantWitnesses,
+    CompiledContract.withCompiledFileAssets(compiledAssetsBaseUrl),
+  );
+
+  return {
+    connect: config.connect,
+    async submitCompliance(providers, input) {
+      if (!evaluatePortfolio(input.allocation, input.policy).passed) {
+        throw new RangeError("Invalid portfolios cannot be submitted to Midnight.");
+      }
+
+      const finalized = await submit(providers, {
+        compiledContract,
+        contractAddress,
+        circuitId: "proveCompliance",
+        args: [
+          BigInt(input.allocation.cash),
+          BigInt(input.allocation.bonds),
+          BigInt(input.allocation.equities),
+          BigInt(input.allocation.speculative),
+        ],
+      });
+
+      return {
+        transactionId: requirePublicIdentifier(finalized.public.txId, "Transaction ID"),
+        network,
+        contractAddress,
+      };
+    },
+  };
+}
+
+export async function verifyPortfolioOnMidnight(
+  midnight: MidnightBindingPort,
+  input: Readonly<{ allocation: Allocation; policy: RiskPolicy; policyName: string }>,
+  onState: (state: VerificationState) => void = () => {},
+): Promise<VerificationResult> {
+  const evaluation = evaluatePortfolio(input.allocation, input.policy);
+  if (!evaluation.passed) {
+    const result = {
+      status: "invalid-locally" as const,
+      failureIds: evaluation.failures.map(({ id }) => id),
+    };
+    onState(result);
+    return result;
+  }
+
+  let providers: MidnightProviders;
+  try {
+    onState({ status: "wallet-connection-required" });
+    providers = await midnight.connect();
+  } catch (cause) {
+    onState({ status: "failed", stage: "wallet" });
+    throw new VerificationError("wallet", cause);
+  }
+
+  try {
+    onState({ status: "verifying-on-midnight" });
+    const transaction = await midnight.submitCompliance(providers, input);
+    const attestation: PublicAttestation = {
+      transactionId: transaction.transactionId,
+      policyName: input.policyName,
+      compliant: true,
+    };
+    const result = { status: "finalized" as const, attestation, transaction };
+    onState({ status: "finalized", attestation });
+    return result;
+  } catch (cause) {
+    onState({ status: "failed", stage: "midnight" });
+    throw new VerificationError("midnight", cause);
   }
 }
 

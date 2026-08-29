@@ -19,8 +19,10 @@ The current browser experience implements a clearly labelled local compliance
 preview through a deterministic policy adapter. Invalid portfolios stop locally
 and never create a shareable preview. `contract/src/veilrisk.compact` contains
 the matching Compact circuit. Both engines run the same shared basis-point
-boundary vectors in tests. Wiring the generated bindings and Lace wallet is the
-next integration milestone.
+boundary vectors in tests. A browser-ready adapter now wraps the generated
+contract binding and finalized Midnight.js call while returning only public
+transaction identifiers. Connecting that adapter to Lace is the next
+integration milestone.
 
 ## Privacy boundary
 
@@ -41,6 +43,9 @@ the portfolio.
 npm install
 npm run dev
 ```
+
+The development and production build commands compile the Compact contract and
+copy its generated proving/verifying assets into an ignored public build path.
 
 ## Build and validate
 
@@ -76,10 +81,10 @@ for the final browser-to-chain integration.
 
 ## Focused roadmap
 
-- Generate TypeScript bindings from the Compact contract.
-- Expand the deterministic browser E2E suite to cover all required journeys.
-- Connect Lace and deploy/join the risk-policy contract on Preprod.
+- Connect Lace providers to the generated-binding adapter.
+- Deploy/join the risk-policy contract on Preprod.
 - Replace the local proof animation with the real transaction lifecycle.
+- Expand browser E2E coverage with mocked wallet and transaction journeys.
 - Send only approved policy outcomes to the AI explanation endpoint.
 - Record the required two-minute public demo.
 
@@ -88,14 +93,16 @@ for the final browser-to-chain integration.
 ```text
 app/                 Browser experience
 lib/risk.ts          Deterministic policy engine
-lib/verification.ts  Injectable external-service workflow
+lib/verification.ts  Injectable workflow and generated Midnight binding adapter
 contract/src/        Compact smart contract
+scripts/             Reproducible generated-asset preparation
 .openai/hosting.json Optional frontend hosting configuration
 ```
 
-The verification workflow accepts injected wallet, proof-provider,
-transaction, indexer, and AI ports. Routine tests use deterministic fakes; real
-Preprod dependencies remain a separate integration milestone.
+The verification layer accepts deterministic fakes for routine tests and owns
+the Midnight.js `CompiledContract` and `submitCallTx` details. The pinned
+Midnight runtime dependencies match Compact toolchain 0.31.1. Lace provider
+creation and real Preprod verification remain separate integration milestones.
 
 This repository is intentionally scoped to a demonstrable privacy boundary. It
 does not execute trades, connect to brokerages, or provide financial advice.
