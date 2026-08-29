@@ -159,14 +159,14 @@ test("a public-state mismatch preserves the public receipt for safe recovery", a
   });
 });
 
-test("the tracked Preprod deployment record is public-only and matches the app policy", () => {
+test("the tracked Preprod deployment record is verified, public-only, and matches the app policy", () => {
   assert.deepEqual(deploymentRecord, {
     network: "preprod",
     policyName: "Conservative mandate",
     policy: DEFAULT_POLICY,
-    contractAddress: null,
-    deploymentTransactionId: null,
-    publicStateVerified: false,
+    contractAddress: "3e3ab54fd9383a11b457cc48b73e084db0aaf63ad3499c149cc1b43e1cf4e4f6",
+    deploymentTransactionId: "00278124492b9ef69f7f7377306f1b1690707d9292bb83e289dcf503d98c63a611",
+    publicStateVerified: true,
   });
   assert.doesNotMatch(
     JSON.stringify(deploymentRecord),

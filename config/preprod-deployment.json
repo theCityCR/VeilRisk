@@ -6,7 +6,7 @@
     "maxGrowth": 7000,
     "maxSingleBucket": 6000
   },
-  "contractAddress": null,
-  "deploymentTransactionId": null,
-  "publicStateVerified": false
+  "contractAddress": "3e3ab54fd9383a11b457cc48b73e084db0aaf63ad3499c149cc1b43e1cf4e4f6",
+  "deploymentTransactionId": "00278124492b9ef69f7f7377306f1b1690707d9292bb83e289dcf503d98c63a611",
+  "publicStateVerified": true
 }

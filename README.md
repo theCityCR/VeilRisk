@@ -126,6 +126,10 @@ three policy limits and an initial proof count of zero. Only then does it update
 only the public contract address, transaction ID, network, and policy. No
 portfolio allocation participates in policy deployment.
 
+The fixed policy contract is deployed and independently verified on Preprod.
+The public identifiers and inspection evidence are recorded in
+[`docs/PREPROD_DEPLOYMENT.md`](docs/PREPROD_DEPLOYMENT.md).
+
 The browser operator page remains available at `http://localhost:3000/deploy`
 for Lace connector testing. It performs the same public-state verification, but
 the local command does not depend on the browser extension connection.
@@ -141,7 +145,6 @@ maintenance workflow; the deployed policy is intended to remain fixed.
 
 ## Focused roadmap
 
-- Run the local Preprod deployment command and commit its verified public receipt.
 - Connect the prepared Lace providers to the browser verification action.
 - Replace the local preview action with the real proof and transaction lifecycle.
 - Expand browser E2E coverage with mocked proof and transaction journeys.

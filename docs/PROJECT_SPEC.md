@@ -391,8 +391,9 @@ Implemented:
   Midnight runtime for generated bindings, ephemeral deployment maintenance
   state, indexed public-state verification, wallet cleanup, and an atomic
   public-only receipt write;
-- a tracked public-only Preprod deployment record whose address and transaction
-  fields remain empty until a real deployment is verified;
+- a real Preprod deployment of the fixed Conservative mandate, with its
+  public-only address and transaction identifier recorded after independent
+  indexer verification;
 - public-safe explanation copy;
 - verified Compact contract compilation and simulator tests for policy
   boundaries and assertion failures;
@@ -403,10 +404,7 @@ Not yet implemented or verified:
 
 - browser E2E coverage for proof execution, transaction, indexer, and AI
   journeys when those product surfaces are implemented;
-- completion of either deployment path and population of
-  `config/preprod-deployment.json` with its verified public receipt;
 - real proof generation through Lace's configured proving provider;
-- deployment to a Midnight network;
 - real proof and transaction lifecycle;
 - AI API integration; and
 - Devpost submission materials.
