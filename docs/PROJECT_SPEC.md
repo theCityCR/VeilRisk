@@ -386,8 +386,9 @@ Implemented:
   fails;
 - a local Preprod deployment command using the compatible Midnight wallet SDK,
   a hidden interactive recovery-phrase prompt, local proof server, tDUST
-  readiness check, indexed public-state verification, wallet cleanup, and an
-  atomic public-only receipt write;
+  readiness check, safe retry for interrupted RPC/indexer synchronization,
+  indexed public-state verification, wallet cleanup, and an atomic public-only
+  receipt write;
 - a tracked public-only Preprod deployment record whose address and transaction
   fields remain empty until a real deployment is verified;
 - public-safe explanation copy;

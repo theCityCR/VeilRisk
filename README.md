@@ -100,7 +100,10 @@ put the phrase in an environment variable, command-line argument, project file,
 or chat. It derives the same account locally in process memory, waits up to
 three minutes for Preprod synchronization, confirms that tDUST is available,
 and deploys the fixed Conservative mandate (20% speculative, 70% growth, and
-60% concentration).
+60% concentration). An interrupted RPC/indexer synchronization is retried up to
+three times with fresh in-memory wallet state; timeouts, empty tDUST, and the
+known intermittent Preprod tDUST synchronization fault remain explicit and
+create no transaction.
 
 After finalization, the command reads the indexed ledger state and confirms the
 three policy limits and an initial proof count of zero. Only then does it update

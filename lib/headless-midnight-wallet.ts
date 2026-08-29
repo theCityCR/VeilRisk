@@ -52,6 +52,52 @@ export class HeadlessWalletError extends Error {
   }
 }
 
+const WALLET_SYNC_ATTEMPTS = 3;
+
+function errorChainContains(cause: unknown, marker: string, depth = 0): boolean {
+  if (depth >= 8 || !(cause instanceof Error)) return false;
+  return cause.message.toLowerCase().includes(marker)
+    || errorChainContains(cause.cause, marker, depth + 1);
+}
+
+function safeWalletSyncError(cause: unknown) {
+  if (errorChainContains(cause, "values inserted non-linearly into dust commitment tree")) {
+    return new HeadlessWalletError(
+      "Preprod hit its known intermittent tDUST synchronization fault. No transaction was submitted; wait briefly and retry.",
+    );
+  }
+  if (cause instanceof Error && cause.name === "TimeoutError") {
+    return new HeadlessWalletError(
+      "The local wallet did not finish Preprod synchronization within three minutes. No transaction was submitted; retry when the network is stable.",
+    );
+  }
+  return new HeadlessWalletError(
+    "The Preprod RPC or indexer interrupted wallet synchronization. No transaction was submitted; retry the command.",
+  );
+}
+
+export async function retryWalletSynchronization<T>(
+  attempt: () => Promise<T>,
+  report: (message: string) => void = () => {},
+  maxAttempts = WALLET_SYNC_ATTEMPTS,
+) {
+  for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber += 1) {
+    try {
+      return await attempt();
+    } catch (cause) {
+      if (cause instanceof HeadlessWalletError) throw cause;
+      if (cause instanceof Error && cause.name === "TimeoutError") {
+        throw safeWalletSyncError(cause);
+      }
+      if (attemptNumber === maxAttempts) throw safeWalletSyncError(cause);
+      report(
+        `Preprod wallet synchronization was interrupted; retrying locally (${attemptNumber + 1}/${maxAttempts})...`,
+      );
+    }
+  }
+  throw new HeadlessWalletError("The local Preprod wallet could not synchronize.");
+}
+
 export function requireDustBalance(balance: bigint) {
   if (balance <= 0n) {
     throw new HeadlessWalletError(
@@ -237,46 +283,46 @@ export async function checkLocalDeploymentPrerequisites(compiledAssetsPath: stri
 export async function openHeadlessPreprodWallet(
   recoveryPhrase: string,
   compiledAssetsPath: string,
+  report: (message: string) => void = () => {},
 ): Promise<LocalWalletSession> {
   setNetworkId(PREPROD.networkId);
   globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
 
-  let context: WalletContext | undefined;
-  try {
-    context = await initializeWallet(recoveryPhrase);
-    const synchronizedState = await firstValueFrom(
-      context.wallet.state().pipe(
-        filter((state) => state.isSynced),
-        timeout({ first: 180_000 }),
-      ),
-    );
-    requireDustBalance(synchronizedState.dust?.balance(new Date()) ?? 0n);
+  return await retryWalletSynchronization(async () => {
+    let context: WalletContext | undefined;
+    try {
+      context = await initializeWallet(recoveryPhrase);
+      const synchronizedState = await firstValueFrom(
+        context.wallet.state().pipe(
+          filter((state) => state.isSynced),
+          timeout({ first: 180_000 }),
+        ),
+      );
+      requireDustBalance(synchronizedState.dust?.balance(new Date()) ?? 0n);
 
-    const walletProvider = createWalletProvider(context);
-    const zkConfigProvider = new NodeZkConfigProvider(compiledAssetsPath);
-    const providers = {
-      publicDataProvider: indexerPublicDataProvider(
-        PREPROD.indexer,
-        PREPROD.indexerWebSocket,
-      ),
-      zkConfigProvider,
-      proofProvider: httpClientProofProvider(PREPROD.proofServer, zkConfigProvider),
-      walletProvider,
-      midnightProvider: walletProvider,
-    };
+      const walletProvider = createWalletProvider(context);
+      const zkConfigProvider = new NodeZkConfigProvider(compiledAssetsPath);
+      const providers = {
+        publicDataProvider: indexerPublicDataProvider(
+          PREPROD.indexer,
+          PREPROD.indexerWebSocket,
+        ),
+        zkConfigProvider,
+        proofProvider: httpClientProofProvider(PREPROD.proofServer, zkConfigProvider),
+        walletProvider,
+        midnightProvider: walletProvider,
+      };
 
-    return {
-      providers,
-      close: async () => {
-        if (context) await clearWalletContext(context);
-        context = undefined;
-      },
-    };
-  } catch (cause) {
-    if (context) await clearWalletContext(context);
-    if (cause instanceof HeadlessWalletError) throw cause;
-    throw new HeadlessWalletError(
-      "The local Preprod wallet could not synchronize. Check the network and retry.",
-    );
-  }
+      return {
+        providers,
+        close: async () => {
+          if (context) await clearWalletContext(context);
+          context = undefined;
+        },
+      };
+    } catch (cause) {
+      if (context) await clearWalletContext(context);
+      throw cause;
+    }
+  }, report);
 }

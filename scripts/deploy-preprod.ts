@@ -41,6 +41,7 @@ async function main() {
     openWallet: (recoveryPhrase) => openHeadlessPreprodWallet(
       recoveryPhrase,
       compiledAssetsPath,
+      report,
     ),
     deployPolicy: async (session, update) => {
       const deploy = createVeilRiskDeployment({

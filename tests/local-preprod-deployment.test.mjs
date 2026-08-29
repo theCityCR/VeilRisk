@@ -17,6 +17,7 @@ import {
   HeadlessWalletError,
   openHeadlessPreprodWallet,
   requireDustBalance,
+  retryWalletSynchronization,
 } from "../lib/headless-midnight-wallet.ts";
 
 const PRIVATE_SENTINEL = "private recovery phrase sentinel";
@@ -145,6 +146,72 @@ test("the public record contains only the fixed policy and verified public ident
 test("tDUST readiness accepts the first positive unit and rejects an empty tank", () => {
   assert.equal(requireDustBalance(1n), 1n);
   assert.throws(() => requireDustBalance(0n), /tDUST tank is empty/);
+});
+
+test("interrupted Preprod synchronization retries locally and can recover", async () => {
+  let attempts = 0;
+  const reports = [];
+  const result = await retryWalletSynchronization(async () => {
+    attempts += 1;
+    if (attempts < 3) throw new Error(PRIVATE_SENTINEL);
+    return "synchronized";
+  }, (message) => reports.push(message));
+
+  assert.equal(result, "synchronized");
+  assert.equal(attempts, 3);
+  assert.deepEqual(reports, [
+    "Preprod wallet synchronization was interrupted; retrying locally (2/3)...",
+    "Preprod wallet synchronization was interrupted; retrying locally (3/3)...",
+  ]);
+  assert.doesNotMatch(JSON.stringify(reports), new RegExp(PRIVATE_SENTINEL));
+});
+
+test("known tDUST sync and timeout failures receive safe specific guidance", async () => {
+  let dustAttempts = 0;
+  await assert.rejects(
+    retryWalletSynchronization(async () => {
+      dustAttempts += 1;
+      throw new Error(
+        "wallet wrapper",
+        { cause: new Error("values inserted non-linearly into dust commitment tree") },
+      );
+    }),
+    (error) => {
+      assert.ok(error instanceof HeadlessWalletError);
+      assert.match(error.message, /known intermittent tDUST synchronization fault/);
+      assert.doesNotMatch(error.message, /commitment tree/i);
+      return true;
+    },
+  );
+  assert.equal(dustAttempts, 3);
+
+  const timeoutError = new Error(PRIVATE_SENTINEL);
+  timeoutError.name = "TimeoutError";
+  let timeoutAttempts = 0;
+  await assert.rejects(
+    retryWalletSynchronization(async () => {
+      timeoutAttempts += 1;
+      throw timeoutError;
+    }),
+    (error) => {
+      assert.match(error.message, /within three minutes/);
+      assert.doesNotMatch(error.message, new RegExp(PRIVATE_SENTINEL));
+      return true;
+    },
+  );
+  assert.equal(timeoutAttempts, 1);
+});
+
+test("local validation failures do not retry wallet synchronization", async () => {
+  let attempts = 0;
+  await assert.rejects(
+    retryWalletSynchronization(async () => {
+      attempts += 1;
+      throw new HeadlessWalletError("The tDUST tank is empty.");
+    }),
+    /tDUST tank is empty/,
+  );
+  assert.equal(attempts, 1);
 });
 
 test("an invalid recovery phrase fails locally without disclosing its contents", async () => {
