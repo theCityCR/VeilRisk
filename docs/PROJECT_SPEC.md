@@ -380,7 +380,8 @@ Implemented:
   identifiers;
 - Lace connector API 4 discovery and Preprod validation with wallet-delegated
   proving, transaction balancing/submission, and indexer providers kept behind
-  the verification adapter; setup exposes no wallet address, key material,
+  the verification adapter; setup avoids eager capability permission hints and
+  exposes no wallet address, key material,
   allocations, proof, signature request, or transaction;
 - a dedicated Lace-backed Preprod deployment surface that deploys the fixed
   public policy, returns only public identifiers, verifies the indexed ledger

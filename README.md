@@ -79,7 +79,8 @@ npm test
 A Lace wallet configured for Preprod is required for browser setup. Lace
 delegates proving to the provider selected in the wallet; real proof generation
 and submission still require reachable Preprod services and a deployed VeilRisk
-contract.
+contract. VeilRisk requests each wallet capability only when its corresponding
+step begins; it does not make an eager permission-hint request during setup.
 
 ## Deploy the policy contract on Preprod
 

@@ -91,6 +91,7 @@ export type LaceFailureReason =
   | "disconnected"
   | "configuration-invalid"
   | "proof-provider-unavailable"
+  | "wallet-unresponsive"
   | "signature-rejected"
   | "submission-rejected"
   | "unknown";
@@ -194,6 +195,8 @@ export function getLaceFailureMessage(reason: LaceFailureReason) {
       return "Lace returned incomplete network configuration. Check the wallet network settings.";
     case "proof-provider-unavailable":
       return "Lace could not configure its proving provider. Check its proof settings, then retry.";
+    case "wallet-unresponsive":
+      return "Lace did not complete the connection. Unlock Lace, remove localhost:3000 from Authorized DApps if it is listed, refresh this page, then retry.";
     case "signature-rejected":
       return "The wallet signature was rejected. No transaction was submitted; you can retry.";
     case "submission-rejected":
@@ -203,9 +206,11 @@ export function getLaceFailureMessage(reason: LaceFailureReason) {
   }
 }
 
-function connectorCode(cause: unknown) {
-  if (typeof cause !== "object" || cause === null || !("code" in cause)) return undefined;
-  return String(cause.code);
+function connectorCode(cause: unknown, depth = 0): string | undefined {
+  if (typeof cause !== "object" || cause === null || depth >= 4) return undefined;
+  if ("code" in cause) return String(cause.code);
+  if ("cause" in cause) return connectorCode(cause.cause, depth + 1);
+  return undefined;
 }
 
 function connectionFailure(cause: unknown) {
@@ -216,7 +221,7 @@ function connectionFailure(cause: unknown) {
   if (code === ErrorCodes.Disconnected) {
     return new LaceConnectorError("disconnected", cause);
   }
-  return new LaceConnectorError("unknown", cause);
+  return new LaceConnectorError("wallet-unresponsive", cause);
 }
 
 function transactionFailure(
@@ -316,12 +321,6 @@ export function createLaceConnector(config: LaceConnectorConfig): LaceConnectorP
     try {
       connected = await selected.connect(network);
       await requireConnected(connected, network);
-      await connected.hintUsage([
-        "getShieldedAddresses",
-        "getProvingProvider",
-        "balanceUnsealedTransaction",
-        "submitTransaction",
-      ]);
     } catch (cause) {
       if (cause instanceof LaceConnectorError) throw cause;
       throw connectionFailure(cause);

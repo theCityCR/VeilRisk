@@ -106,7 +106,9 @@ async function installMockLace(
       getConnectionStatus: async () => runtime.__laceConnected
         ? { status: "connected", networkId: "preprod" }
         : { status: "disconnected" },
-      hintUsage: async () => {},
+      hintUsage: async () => {
+        throw new Error("private eager permission hint failure");
+      },
       getConfiguration: async () => ({
         indexerUri: "https://indexer.preprod.midnight.network/api/v3/graphql",
         indexerWsUri: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",

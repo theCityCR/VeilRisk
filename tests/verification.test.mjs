@@ -550,7 +550,16 @@ describe("Lace connector and provider configuration", () => {
     assert.equal(JSON.stringify(summary).includes("private_wallet_address"), false);
     assert.equal(JSON.stringify(summary).includes("privatecoin"), false);
     assert.deepEqual(calls[0], ["connect", "preprod"]);
-    assert.ok(calls.some((call) => Array.isArray(call) && call[0] === "hint"));
+    assert.equal(calls.some((call) => Array.isArray(call) && call[0] === "hint"), false);
+  });
+
+  test("setup does not make an eager permission-hint request", async () => {
+    const { connector, calls } = createLaceHarness({
+      hintError: apiError("InternalError"),
+    });
+
+    assert.equal((await connector.connect()).network, "preprod");
+    assert.equal(calls.some((call) => Array.isArray(call) && call[0] === "hint"), false);
   });
 
   test("permission and proof-provider failures can be retried", async () => {
@@ -564,6 +573,22 @@ describe("Lace connector and provider configuration", () => {
         (error) => error instanceof LaceConnectorError && error.reason === reason,
       );
       assert.equal((await connector.connect()).proofMode, "wallet-delegated");
+    }
+  });
+
+  test("nested and internal connection errors produce actionable private-safe reasons", async () => {
+    for (const [error, reason] of [
+      [new Error("wrapper", { cause: apiError("PermissionRejected") }), "permission-rejected"],
+      [apiError("InternalError"), "wallet-unresponsive"],
+      [apiError("InvalidRequest"), "wallet-unresponsive"],
+    ]) {
+      const { connector } = createLaceHarness({ connectErrorOnce: error });
+      await assert.rejects(
+        connector.connect(),
+        (cause) => cause instanceof LaceConnectorError
+          && cause.reason === reason
+          && !cause.message.includes("wallet detail"),
+      );
     }
   });
 
