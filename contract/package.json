@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "compact": "compact compile src/veilrisk.compact src/managed/veilrisk"
+    "compact": "compact compile src/veilrisk.compact src/managed/veilrisk",
+    "pretest": "npm run compact",
+    "test": "node --test src/test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.16.0"
   }
 }

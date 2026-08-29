@@ -13,6 +13,17 @@ Install Compact developer tools and toolchain `0.31.1`, then run:
 npm run compact
 ```
 
-The browser currently uses a deterministic local adapter with the same policy
-rules. The next milestone is replacing that adapter with the generated Midnight
+## Test
+
+The simulator suite compiles the contract, executes its generated bindings, and
+checks every policy boundary and assertion without submitting transactions:
+
+```bash
+npm test
+```
+
+The browser uses integer basis points and a deterministic local adapter with the
+same policy rules. TypeScript and the generated Compact simulator execute one
+shared set of success, failure, exact-cap, and one-basis-point boundary vectors.
+The next milestone is replacing the local adapter with the generated Midnight
 contract bindings and Lace wallet flow.
