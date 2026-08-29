@@ -5,7 +5,9 @@ import { Contract, ledger } from "../contract/src/managed/veilrisk/contract/inde
 import {
   createVeilRiskDeployment,
   DeploymentError,
+  getDeploymentFailureMessage,
 } from "../lib/deployment.ts";
+import { LaceConnectorError } from "../lib/verification.ts";
 import { DEFAULT_POLICY } from "../lib/risk.ts";
 import deploymentRecord from "../config/preprod-deployment.json" with { type: "json" };
 
@@ -111,6 +113,27 @@ test("wallet and deployment rejection are recoverable and do not expose private 
     const retry = harness();
     assert.equal((await retry.deploy(DEFAULT_POLICY)).publicStateVerified, true);
   }
+});
+
+test("deployment failures produce safe, actionable Lace guidance", () => {
+  assert.equal(
+    getDeploymentFailureMessage(
+      new DeploymentError("wallet", new LaceConnectorError("unavailable")),
+    ),
+    "Lace was not found. Install or enable the Midnight Lace extension, then retry.",
+  );
+  assert.equal(
+    getDeploymentFailureMessage(
+      new DeploymentError("deployment", new LaceConnectorError("network-mismatch")),
+    ),
+    "Lace is connected to a different network. Switch it to Preprod, then retry.",
+  );
+  assert.equal(
+    getDeploymentFailureMessage(
+      new DeploymentError("deployment", new Error("private provider detail")),
+    ),
+    "Lace could not generate, balance, or submit the deployment. Check its Preprod funds and proving service, then retry.",
+  );
 });
 
 test("a public-state mismatch preserves the public receipt for safe recovery", async () => {

@@ -7,6 +7,11 @@ import {
   ledger as readVeilRiskLedger,
 } from "../contract/src/managed/veilrisk/contract/index.js";
 import { BASIS_POINTS_TOTAL, type RiskPolicy } from "./risk.ts";
+import {
+  getLaceFailureMessage,
+  LaceConnectorError,
+  type LaceFailureReason,
+} from "./verification.ts";
 
 type VeilRiskGeneratedContract = VeilRiskContract<undefined>;
 type MidnightProviders = Readonly<{ publicDataProvider: PublicDataProvider }> & object;
@@ -67,6 +72,28 @@ export class DeploymentError extends Error {
     this.stage = stage;
     this.receipt = receipt;
   }
+}
+
+function findLaceFailureReason(cause: unknown, depth = 0): LaceFailureReason | undefined {
+  if (cause instanceof LaceConnectorError) return cause.reason;
+  if (depth >= 6 || !(cause instanceof Error)) return undefined;
+  return findLaceFailureReason(cause.cause, depth + 1);
+}
+
+export function getDeploymentFailureMessage(cause: unknown) {
+  const laceReason = findLaceFailureReason(cause);
+  if (laceReason) return getLaceFailureMessage(laceReason);
+
+  if (cause instanceof DeploymentError) {
+    if (cause.receipt) {
+      return "The transaction finalized, but its indexed public policy could not be confirmed. Keep the public identifiers below and retry inspection before using this contract.";
+    }
+    if (cause.stage === "deployment") {
+      return "Lace could not generate, balance, or submit the deployment. Check its Preprod funds and proving service, then retry.";
+    }
+  }
+
+  return "No verified deployment was produced. Check Lace, its Preprod balance, and the configured proving service, then retry.";
 }
 
 export type VeilRiskDeploymentConfig = Readonly<{

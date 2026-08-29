@@ -50,14 +50,12 @@ export default function DeployPolicyContract() {
       });
       setView({ status: "finalized", deployment: result });
     } catch (cause) {
-      const { DeploymentError } = await import("../../lib/deployment");
+      const { DeploymentError, getDeploymentFailureMessage } = await import("../../lib/deployment");
       const receipt = cause instanceof DeploymentError ? cause.receipt : undefined;
       setView({
         status: "failed",
         receipt,
-        message: receipt
-          ? "The transaction finalized, but its indexed public policy could not be confirmed. Keep the public identifiers below and retry inspection before using this contract."
-          : "No verified deployment was produced. Check Lace, its Preprod balance, and the configured proving service, then retry.",
+        message: getDeploymentFailureMessage(cause),
       });
     }
   };

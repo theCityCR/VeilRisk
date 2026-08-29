@@ -11,7 +11,8 @@ const browserIssues = new WeakMap<import("@playwright/test").Page, string[]>();
 
 async function attemptDeploymentWithoutLace(page: import("@playwright/test").Page) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const button = page.getByRole("button", { name: "Connect Lace and deploy" });
+    if (await page.getByRole("alert").isVisible()) return;
+    const button = page.getByRole("button", { name: /^(Connect Lace and deploy|Retry deployment)$/ });
     await button.waitFor();
     const deploymentReloaded = page.waitForEvent("framenavigated").then(() => "reloaded" as const);
     const deploymentUnavailable = page.getByRole("alert").waitFor({ timeout: 30_000 }).then(() => "failed" as const);
@@ -387,7 +388,7 @@ test("the deployment surface exposes only the fixed public policy and fails safe
   await expect(page.locator("main")).not.toContainText(/cash|bonds|equities|wallet address|signing key/i);
 
   await attemptDeploymentWithoutLace(page);
-  await expect(page.getByRole("alert")).toContainText("No verified deployment was produced", { timeout: 20_000 });
+  await expect(page.getByRole("alert")).toContainText("Lace was not found", { timeout: 20_000 });
   await expect(page.getByLabel("Public deployment receipt")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Retry deployment" })).toBeEnabled();
   expect(outboundSubmissions).toEqual([]);
