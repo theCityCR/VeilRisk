@@ -22,6 +22,9 @@ test("server-renders the VeilRisk product surface", async () => {
   assert.match(html, /Prove the policy/);
   assert.match(html, /Private portfolio compliance/);
   assert.match(html, /Portfolio allocation/);
-  assert.match(html, /Risk attestation/);
+  assert.match(html, /Compliance preview/);
+  assert.match(html, /Local prototype/);
+  assert.match(html, /not on-chain/i);
+  assert.doesNotMatch(html, /Midnight · Preprod|vr_[a-z0-9]+/i);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview/);
 });

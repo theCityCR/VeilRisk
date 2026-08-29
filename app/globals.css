@@ -69,6 +69,13 @@ output { text-align: right; font-family: var(--font-geist-mono), monospace; colo
 .policy-box h3 { margin: 5px 0 0; font-size: 15px; }
 .policy-box label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }
 select { color: var(--ink); background: #151624; border: 1px solid var(--line); border-radius: 8px; padding: 7px 28px 7px 9px; }
+.local-check { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,.018); }
+.local-check-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.local-check-heading h3 { margin: 5px 0 0; font-size: 15px; }
+.local-check-heading > strong { border-radius: 999px; padding: 6px 9px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.local-pass { color: var(--mint); background: rgba(184,244,207,.08); }
+.local-fail { color: var(--danger); background: rgba(255,140,140,.08); }
+.validation-message { margin: 0 0 12px; border: 1px solid rgba(255,140,140,.24); border-radius: 10px; padding: 10px 12px; color: var(--danger); background: rgba(255,140,140,.06); font-size: 12px; line-height: 1.5; }
 .prove-button { width: 100%; border: 0; border-radius: 12px; padding: 14px 18px; color: #11131b; background: var(--mint); font-weight: 750; transition: transform .18s ease, box-shadow .18s ease; }
 .prove-button:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(184,244,207,.16); }
 .prove-button:disabled { cursor: wait; opacity: .65; }
@@ -90,7 +97,7 @@ select { color: var(--ink); background: #151624; border: 1px solid var(--line); 
 .proof-meta { display: grid; grid-template-columns: 1fr auto; gap: 8px 18px; font-size: 11px; }
 .proof-meta span { color: var(--muted); }
 .proof-meta code, .proof-meta strong { font-family: var(--font-geist-mono), monospace; font-weight: 500; color: #dfe0ea; }
-.checks { display: grid; gap: 10px; margin: 18px 0; }
+.checks { display: grid; gap: 10px; margin: 14px 0 0; }
 .check { display: flex; gap: 12px; align-items: center; padding: 10px 12px; background: rgba(255,255,255,.025); border-radius: 10px; }
 .check > span { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 50%; font-size: 12px; }
 .check-pass { color: var(--mint); background: rgba(184,244,207,.08); }
@@ -122,5 +129,5 @@ footer { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 
   .allocation-row { grid-template-columns: 82px 1fr; }
   .policy-box, footer { align-items: flex-start; flex-direction: column; }
   .network-pill { font-size: 0; }
-  .network-pill::after { content: "Preprod"; font-size: 12px; }
+  .network-pill::after { content: "Local"; font-size: 12px; }
 }
