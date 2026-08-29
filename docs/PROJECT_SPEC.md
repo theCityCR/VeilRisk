@@ -323,6 +323,36 @@ The public panel must show **local preview** until finalization.
 - The project builds and its tests pass from a clean checkout.
 - The complete demo can be performed in under two minutes.
 
+### AI-assisted development requirements
+
+This project assumes that coding agents may implement changes with little human
+supervision. `AGENTS.md` is the authoritative execution policy for agents. At a
+minimum:
+
+- every externally observable behavior must have success, failure, boundary,
+  recovery, and privacy coverage at the appropriate test layer;
+- every critical user journey must have a deterministic browser E2E test;
+- contract rules must be tested in both the TypeScript policy engine and the
+  generated Compact simulator, using matching boundary vectors;
+- every bug fix must include a regression test;
+- wallet, proof-provider, indexer, transaction, and AI dependencies must be
+  mockable so routine CI is deterministic;
+- a separate real-Preprod smoke suite must verify the external integration
+  without making routine correctness depend on network availability;
+- tests must assert forbidden side effects, including the absence of wallet or
+  network calls after local validation failure and the absence of private data
+  from public or outbound artifacts;
+- agents must not weaken or skip tests to make a patch pass; and
+- agents must state which required checks ran and must not claim completion when
+  a relevant gate is failing or unavailable.
+
+The browser E2E suite must eventually exercise every available user action and
+must include preset selection, editable inputs, all policy boundaries,
+stale-attestation clearing, wallet rejection and recovery, proof and transaction
+state transitions, public-view privacy, AI disclosure filtering and fallback,
+fresh-session behavior, keyboard access, and mobile layout. A feature is not
+complete until its corresponding deterministic E2E coverage lands with it.
+
 ## 10. Current status
 
 Implemented:
@@ -330,16 +360,28 @@ Implemented:
 - responsive private/public browser experience;
 - compliant and risky demo presets;
 - deterministic local policy evaluation;
+- integer basis-point inputs with shared parity vectors executed by both the
+  TypeScript policy engine and generated Compact simulator;
+- explicit local-preview states that prevent invalid portfolios from producing
+  an attestation and do not claim network verification;
+- deterministic browser E2E coverage at desktop and mobile viewports for
+  presets, invalid totals, policy boundaries, stale-state invalidation,
+  keyboard use, fresh sessions, public-surface privacy, outbound submission
+  absence, viewport overflow, and unexpected browser errors;
+- injectable wallet, proof-provider, transaction, indexer, and AI ports with a
+  deterministic orchestration suite covering local short-circuiting, lifecycle
+  order, dependency failures, retry recovery, and disclosure filtering;
 - public-safe explanation copy;
-- initial Compact contract source;
+- verified Compact contract compilation and simulator tests for policy
+  boundaries and assertion failures;
 - frontend build, render test, and lint configuration; and
 - project README and local hosting configuration.
 
 Not yet implemented or verified:
 
-- Compact compilation;
-- contract simulator tests;
-- generated contract bindings;
+- browser E2E coverage for wallet, proof-provider, transaction, indexer, and AI
+  journeys when those product surfaces are implemented;
+- browser integration of the generated contract bindings;
 - Lace wallet connection;
 - proof server configuration;
 - deployment to a Midnight network;
