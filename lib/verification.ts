@@ -10,7 +10,7 @@ import {
   type MidnightProvider,
   type WalletProvider,
 } from "@midnight-ntwrk/midnight-js-types";
-import { Contract as VeilRiskContract } from "../contract/src/managed/veilrisk/contract/index.js";
+import { Contract as VeilRiskContract } from "../work/contract/veilrisk/contract/index.js";
 import { evaluatePortfolio, type Allocation, type RiskPolicy } from "./risk.ts";
 
 export type ProofArtifact = Readonly<{ opaqueProof: string }>;

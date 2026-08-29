@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createUnprovenDeployTx } from "@midnight-ntwrk/midnight-js-contracts";
 import { createConstructorContext } from "@midnight-ntwrk/compact-runtime";
-import { Contract, ledger } from "../contract/src/managed/veilrisk/contract/index.js";
+import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
+import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
+import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
+import * as midnightLedger from "@midnight-ntwrk/midnight-js-protocol/ledger";
+import { Contract, ledger } from "../work/contract/veilrisk/contract/index.js";
 import {
   createVeilRiskDeployment,
   DeploymentError,
@@ -167,4 +172,33 @@ test("the tracked Preprod deployment record is public-only and matches the app p
     JSON.stringify(deploymentRecord),
     /allocation|witness|signing.?key|wallet.?address|private.?state/i,
   );
+});
+
+test("the prepared binding shares the root Midnight runtime and constructs a deploy transaction", async () => {
+  setNetworkId("preprod");
+  const disposableKeys = midnightLedger.ZswapSecretKeys.fromSeed(new Uint8Array(32));
+
+  try {
+    const compiledContract = CompiledContract.make("VeilRisk", Contract).pipe(
+      CompiledContract.withVacantWitnesses,
+      CompiledContract.withCompiledFileAssets("./public/contract/veilrisk"),
+    );
+    const deployment = await createUnprovenDeployTx(
+      {
+        zkConfigProvider: new NodeZkConfigProvider("./public/contract/veilrisk"),
+        walletProvider: {
+          getCoinPublicKey: () => disposableKeys.coinPublicKey,
+          getEncryptionPublicKey: () => disposableKeys.encryptionPublicKey,
+        },
+      },
+      {
+        compiledContract,
+        args: [2000n, 7000n, 6000n],
+      },
+    );
+
+    assert.ok(deployment.public.contractAddress.length > 0);
+  } finally {
+    disposableKeys.clear();
+  }
 });

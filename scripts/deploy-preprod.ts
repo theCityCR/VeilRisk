@@ -23,6 +23,12 @@ const compiledAssetsPath = path.join(
   "veilrisk",
 );
 const publicRecordPath = path.join(projectRoot, "config", "preprod-deployment.json");
+const privateWalletCachePath = path.join(
+  projectRoot,
+  "work",
+  "private",
+  "preprod-wallet-state.enc.json",
+);
 
 function report(message: string) {
   process.stdout.write(`${message}\n`);
@@ -42,6 +48,7 @@ async function main() {
       recoveryPhrase,
       compiledAssetsPath,
       report,
+      privateWalletCachePath,
     ),
     deployPolicy: async (session, update) => {
       const deploy = createVeilRiskDeployment({

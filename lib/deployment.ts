@@ -5,7 +5,7 @@ import type { PublicDataProvider } from "@midnight-ntwrk/midnight-js-types";
 import {
   Contract as VeilRiskContract,
   ledger as readVeilRiskLedger,
-} from "../contract/src/managed/veilrisk/contract/index.js";
+} from "../work/contract/veilrisk/contract/index.js";
 import { BASIS_POINTS_TOTAL, type RiskPolicy } from "./risk.ts";
 import {
   getLaceFailureMessage,

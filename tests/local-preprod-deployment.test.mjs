@@ -203,7 +203,7 @@ test("cold wallet synchronization waits for completion and reports public-safe p
   });
 
   states.next({ isSynced: false });
-  currentTime = 180_001;
+  currentTime = 300_001;
   states.next({ isSynced: false });
   await Promise.resolve();
   assert.equal(settled, false);

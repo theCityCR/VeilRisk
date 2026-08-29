@@ -28,6 +28,13 @@ import { wordlist as english } from "@scure/bip39/wordlists/english.js";
 import { firstValueFrom, filter, tap } from "rxjs";
 import { WebSocket } from "ws";
 import type { LocalWalletSession } from "./local-preprod-deployment.ts";
+import {
+  derivePrivateWalletCacheKey,
+  loadPrivateWalletCache,
+  PrivateWalletCacheError,
+  savePrivateWalletCache,
+} from "./private-wallet-cache.ts";
+import { EphemeralDeploymentPrivateStateProvider } from "./ephemeral-deployment-private-state.ts";
 
 const PREPROD = {
   indexer: "https://indexer.preprod.midnight.network/api/v4/graphql",
@@ -43,6 +50,8 @@ type WalletContext = Readonly<{
   dustSecretKey: ledger.DustSecretKey;
   unshieldedKeystore: UnshieldedKeystore;
   unshieldedSecretKey: Uint8Array;
+  cacheEncryptionKey: Uint8Array;
+  cachePath?: string;
 }>;
 
 export class HeadlessWalletError extends Error {
@@ -53,6 +62,7 @@ export class HeadlessWalletError extends Error {
 }
 
 const WALLET_SYNC_ATTEMPTS = 3;
+const WALLET_SYNC_PROGRESS_INTERVAL_MS = 5 * 60_000;
 
 function errorChainContains(cause: unknown, marker: string, depth = 0): boolean {
   if (depth >= 8 || !(cause instanceof Error)) return false;
@@ -100,7 +110,10 @@ export async function waitForWalletSynchronization(
     wallet.state().pipe(
       tap((state) => {
         const currentTime = now();
-        if (!state.isSynced && currentTime - lastProgressReport >= 30_000) {
+        if (
+          !state.isSynced
+          && currentTime - lastProgressReport >= WALLET_SYNC_PROGRESS_INTERVAL_MS
+        ) {
           report("Wallet synchronization is still running; first-time sync may take several minutes...");
           lastProgressReport = currentTime;
         }
@@ -129,9 +142,15 @@ function normalizeMnemonic(recoveryPhrase: string) {
   return normalized;
 }
 
-async function initializeWallet(recoveryPhrase: string): Promise<WalletContext> {
+async function initializeWallet(
+  recoveryPhrase: string,
+  cachePath: string | undefined,
+  report: (message: string) => void,
+): Promise<WalletContext> {
   const normalized = normalizeMnemonic(recoveryPhrase);
   const seed = Buffer.from(await bip39.mnemonicToSeed(normalized));
+  const cacheEncryptionKey = derivePrivateWalletCacheKey(seed);
+  let retainCacheEncryptionKey = false;
 
   try {
     const hdResult = HDWallet.fromSeed(seed);
@@ -196,27 +215,44 @@ async function initializeWallet(recoveryPhrase: string): Promise<WalletContext> 
         txHistoryStorage: new InMemoryTransactionHistoryStorage(WalletEntrySchema),
       };
       const configuration = { ...shieldedConfig, ...unshieldedConfig, ...dustConfig };
+      let cachedState = null;
+      if (cachePath) {
+        try {
+          cachedState = await loadPrivateWalletCache(cachePath, cacheEncryptionKey);
+          if (cachedState) report("Restoring the encrypted local wallet sync cache...");
+        } catch (cause) {
+          if (!(cause instanceof PrivateWalletCacheError)) throw cause;
+          report("The encrypted wallet sync cache could not be restored; starting a cold sync...");
+        }
+      }
       wallet = await WalletFacade.init({
         configuration,
-        shielded: () => ShieldedWallet(shieldedConfig).startWithSecretKeys(
-          activeShieldedSecretKeys,
-        ),
-        unshielded: () => UnshieldedWallet(unshieldedConfig).startWithPublicKey(
-          UnshieldedPublicKey.fromKeyStore(unshieldedKeystore),
-        ),
-        dust: () => DustWallet(dustConfig).startWithSecretKey(
-          activeDustSecretKey,
-          ledger.LedgerParameters.initialParameters().dust,
-        ),
+        shielded: () => cachedState
+          ? ShieldedWallet(shieldedConfig).restore(cachedState.shielded)
+          : ShieldedWallet(shieldedConfig).startWithSecretKeys(activeShieldedSecretKeys),
+        unshielded: () => cachedState
+          ? UnshieldedWallet(unshieldedConfig).restore(cachedState.unshielded)
+          : UnshieldedWallet(unshieldedConfig).startWithPublicKey(
+            UnshieldedPublicKey.fromKeyStore(unshieldedKeystore),
+          ),
+        dust: () => cachedState
+          ? DustWallet(dustConfig).restore(cachedState.dust)
+          : DustWallet(dustConfig).startWithSecretKey(
+            activeDustSecretKey,
+            ledger.LedgerParameters.initialParameters().dust,
+          ),
       });
       await wallet.start(activeShieldedSecretKeys, activeDustSecretKey);
       initialized = true;
+      retainCacheEncryptionKey = true;
       return {
         wallet,
         shieldedSecretKeys: activeShieldedSecretKeys,
         dustSecretKey: activeDustSecretKey,
         unshieldedKeystore,
         unshieldedSecretKey,
+        cacheEncryptionKey,
+        cachePath,
       };
     } finally {
       shieldedSeed.fill(0);
@@ -224,10 +260,12 @@ async function initializeWallet(recoveryPhrase: string): Promise<WalletContext> 
       if (!initialized) {
         await wallet?.stop().catch(() => {});
         clearSecretMaterial(shieldedSecretKeys, dustSecretKey, unshieldedSecretKey);
+        cacheEncryptionKey.fill(0);
       }
     }
   } finally {
     seed.fill(0);
+    if (!retainCacheEncryptionKey) cacheEncryptionKey.fill(0);
   }
 }
 
@@ -256,6 +294,29 @@ async function clearWalletContext(context: WalletContext) {
     context.dustSecretKey,
     context.unshieldedSecretKey,
   );
+  context.cacheEncryptionKey.fill(0);
+}
+
+async function saveWalletSyncCache(
+  context: WalletContext,
+  report: (message: string) => void,
+) {
+  if (!context.cachePath) return;
+  try {
+    report("Saving an encrypted local wallet sync cache for faster retries...");
+    await savePrivateWalletCache(
+      context.cachePath,
+      {
+        shielded: await context.wallet.shielded.serializeState(),
+        unshielded: await context.wallet.unshielded.serializeState(),
+        dust: await context.wallet.dust.serializeState(),
+      },
+      context.cacheEncryptionKey,
+    );
+  } catch (cause) {
+    if (!(cause instanceof PrivateWalletCacheError)) throw cause;
+    report("The wallet synchronized, but its encrypted local retry cache could not be saved.");
+  }
 }
 
 function createWalletProvider(context: WalletContext): WalletProvider & MidnightProvider {
@@ -296,6 +357,7 @@ export async function openHeadlessPreprodWallet(
   recoveryPhrase: string,
   compiledAssetsPath: string,
   report: (message: string) => void = () => {},
+  cachePath?: string,
 ): Promise<LocalWalletSession> {
   setNetworkId(PREPROD.networkId);
   globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
@@ -303,12 +365,14 @@ export async function openHeadlessPreprodWallet(
   return await retryWalletSynchronization(async () => {
     let context: WalletContext | undefined;
     try {
-      context = await initializeWallet(recoveryPhrase);
+      context = await initializeWallet(recoveryPhrase, cachePath, report);
       const synchronizedState = await waitForWalletSynchronization(context.wallet, report);
       requireDustBalance(synchronizedState.dust?.balance(new Date()) ?? 0n);
+      await saveWalletSyncCache(context, report);
 
       const walletProvider = createWalletProvider(context);
       const zkConfigProvider = new NodeZkConfigProvider(compiledAssetsPath);
+      const privateStateProvider = new EphemeralDeploymentPrivateStateProvider();
       const providers = {
         publicDataProvider: indexerPublicDataProvider(
           PREPROD.indexer,
@@ -318,11 +382,13 @@ export async function openHeadlessPreprodWallet(
         proofProvider: httpClientProofProvider(PREPROD.proofServer, zkConfigProvider),
         walletProvider,
         midnightProvider: walletProvider,
+        privateStateProvider,
       };
 
       return {
         providers,
         close: async () => {
+          await privateStateProvider.clearSigningKeys();
           if (context) await clearWalletContext(context);
           context = undefined;
         },

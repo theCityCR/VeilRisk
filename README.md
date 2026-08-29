@@ -106,6 +106,20 @@ synchronization is retried up to three times with fresh in-memory wallet state;
 empty tDUST and the known intermittent Preprod tDUST synchronization fault
 remain explicit and create no transaction.
 
+After a successful synchronization, the command saves an encrypted, owner-only
+retry cache at `work/private/preprod-wallet-state.enc.json`. Its encryption key
+is derived locally from the recovery phrase, which is never saved. The entire
+`work/` directory is ignored by Git. The first run after installing this version
+still needs a cold synchronization; later retries restore the cache and only
+sync changes since it was written. Deleting the cache is safe and simply forces
+another cold synchronization.
+
+Contract preparation also copies the generated JavaScript binding into the
+root ignored `work/` runtime. This ensures the binding and deployment SDK share
+one Midnight protocol instance; loading the binding from the contract package's
+nested dependencies makes otherwise valid deployment values fail runtime type
+checks before proof generation.
+
 After finalization, the command reads the indexed ledger state and confirms the
 three policy limits and an initial proof count of zero. Only then does it update
 `config/preprod-deployment.json`. Its terminal output and saved receipt contain
@@ -120,6 +134,10 @@ Neither deployment path logs or serializes the SDK deployment object because
 that object also contains private wallet and maintenance data. Never add wallet
 keys, addresses, witness data, recovery phrases, or SDK diagnostic objects to
 the tracked public record.
+
+The deployment-only contract maintenance key is held in memory until the local
+wallet session closes and is then discarded. VeilRisk currently has no contract
+maintenance workflow; the deployed policy is intended to remain fixed.
 
 ## Focused roadmap
 
