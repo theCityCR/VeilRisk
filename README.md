@@ -31,11 +31,10 @@ boundary vectors in tests.
 | Portfolio allocations | Private circuit inputs |
 | Risk limits | Public contract state |
 | Pass/fail transaction | Public and verifiable |
-| AI disclosure packet | Policy outcomes only |
+| Privacy-safe summary | Generated locally from evaluation state |
 
-The AI layer must never calculate the compliance result. It receives a
-deterministic, selectively disclosed summary after the policy engine evaluates
-the portfolio.
+The privacy-safe summary is deterministic and local. VeilRisk does not send
+portfolio data or policy outcomes to an external explanation service.
 
 ## Run the browser app
 
@@ -144,7 +143,7 @@ maintenance workflow; the deployed policy is intended to remain fixed.
 
 ## Focused roadmap
 
-- Send only approved policy outcomes to the AI explanation endpoint.
+- Prepare the Devpost submission materials.
 - Record the required two-minute public demo.
 
 ## Project structure

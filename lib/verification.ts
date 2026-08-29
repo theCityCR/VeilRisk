@@ -28,13 +28,6 @@ export type PublicAttestation = Readonly<{
   compliant: true;
 }>;
 
-export type DisclosurePacket = Readonly<{
-  policyName: string;
-  compliant: boolean;
-  disclosedViolations: readonly string[];
-  userApprovedDetailLevel: "result-only" | "category-guidance";
-}>;
-
 export type WalletPort = Readonly<{
   connect: () => Promise<void>;
   sign: (proof: ProofArtifact) => Promise<SignedTransaction>;
@@ -49,16 +42,11 @@ export type TransactionPort = Readonly<{
 export type IndexerPort = Readonly<{
   getPublicAttestation: (transactionId: string) => Promise<PublicAttestation>;
 }>;
-export type AiExplanationPort = Readonly<{
-  explain: (packet: DisclosurePacket) => Promise<string>;
-}>;
-
 export type VerificationPorts = Readonly<{
   wallet: WalletPort;
   proofProvider: ProofProviderPort;
   transaction: TransactionPort;
   indexer: IndexerPort;
-  ai: AiExplanationPort;
 }>;
 
 type VeilRiskGeneratedContract = VeilRiskContract<undefined>;
@@ -711,17 +699,4 @@ export async function verifyPortfolio(
     onState({ status: "failed", stage });
     throw new VerificationError(stage, cause);
   }
-}
-
-export async function requestApprovedExplanation(
-  ai: AiExplanationPort,
-  packet: DisclosurePacket,
-) {
-  const approvedPacket: DisclosurePacket = {
-    policyName: packet.policyName,
-    compliant: packet.compliant,
-    disclosedViolations: [...packet.disclosedViolations],
-    userApprovedDetailLevel: packet.userApprovedDetailLevel,
-  };
-  return ai.explain(approvedPacket);
 }

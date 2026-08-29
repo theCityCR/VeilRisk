@@ -214,21 +214,34 @@ test("an invalid portfolio fails locally without producing a public artifact", a
   await expect(publicPanel).toContainText("No attestation");
   await expect(publicPanel).not.toContainText("Speculative exposure");
   await expect(publicPanel).not.toContainText("Policy not satisfied");
+  await expect(page.getByLabel("Privacy-safe summary")).toHaveCount(0);
   await expect(page).not.toHaveURL(/vr_|allocation|portfolio/i);
   expect(outboundSubmissions).toEqual([]);
 });
 
 test("a compliant portfolio creates only an explicitly local preview", async ({ page }) => {
+  const outboundRequests: string[] = [];
+  page.on("request", (request) => {
+    if (!(["GET", "HEAD"] as string[]).includes(request.method())) {
+      outboundRequests.push(`${request.method()} ${request.url()}`);
+    }
+  });
   await openInteractiveApp(page);
   await page.getByRole("button", { name: "Create private local preview" }).click();
 
   const publicPanel = page.locator(".public-panel");
+  const summary = page.getByLabel("Privacy-safe summary");
   await expect(publicPanel).toContainText("Private local preview · not on-chain");
   await expect(publicPanel).toContainText("Compliant locally");
   await expect(publicPanel).toContainText("Not submitted");
   await expect(publicPanel).not.toContainText("Midnight Preprod");
   await expect(publicPanel).not.toContainText(/vr_[a-z0-9]+/i);
+  await expect(summary).toContainText("Deterministic privacy summary");
+  await expect(summary).toContainText("The local preview satisfies the selected policy");
+  await expect(summary).toContainText("No external explanation service receives portfolio data");
+  await expect(summary).not.toContainText(/1500|2500|5000|1000/);
   await expect(page.getByText("Private preview · not public", { exact: true })).toBeVisible();
+  expect(outboundRequests).toEqual([]);
 });
 
 test("editing private input clears a stale local preview", async ({ page }) => {
@@ -239,6 +252,7 @@ test("editing private input clears a stale local preview", async ({ page }) => {
   await page.getByRole("slider", { name: "Cash" }).fill("1600");
 
   await expect(page.locator(".public-panel")).toContainText("No attestation");
+  await expect(page.getByLabel("Privacy-safe summary")).toHaveCount(0);
   await expect(page.locator(".private-panel")).toContainText("Needs changes");
 });
 
@@ -465,6 +479,10 @@ test("a real verification progresses through proof, Lace approval, submission, a
   await expect(publicPanel).toContainText("public_compliance_transaction_id");
   await expect(publicPanel).toContainText("Holdings disclosed");
   await expect(publicPanel).toContainText("None");
+  const summary = page.getByLabel("Privacy-safe summary");
+  await expect(summary).toContainText("Deterministic privacy summary");
+  await expect(summary).toContainText("The finalized transaction proves compliance with the public policy");
+  await expect(summary).toContainText("No external explanation service receives portfolio data");
 
   const publicText = await publicPanel.innerText();
   for (const prohibitedValue of ["1500", "2500", "5000", "1000", "15%", "25%", "50%", "10%"] ) {
@@ -499,6 +517,7 @@ test("a real verification progresses through proof, Lace approval, submission, a
   await page.getByRole("slider", { name: "Cash" }).fill("1501");
   await expect(publicPanel).toContainText("No attestation");
   await expect(publicPanel).not.toContainText("public_compliance_transaction_id");
+  await expect(page.getByLabel("Privacy-safe summary")).toHaveCount(0);
 });
 
 for (const [stage, message] of [

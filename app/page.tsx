@@ -432,10 +432,14 @@ export default function Home() {
           )}
 
           {hasLocalPreview || verifiedResult ? (
-            <div className="ai-brief">
-              <div className="ai-heading"><span>AI</span><strong>Selective-disclosure explanation</strong></div>
-              <p>The portfolio satisfies the selected policy. Exact holdings and allocation values remain private.</p>
-              <small>No AI request is sent yet. A future request will contain approved policy outcomes only.</small>
+            <div className="privacy-summary" aria-label="Privacy-safe summary">
+              <div className="privacy-summary-heading"><span>LOCAL</span><strong>Deterministic privacy summary</strong></div>
+              <p>
+                {verifiedResult
+                  ? "The finalized transaction proves compliance with the public policy. Exact holdings and allocation values remain private."
+                  : "The local preview satisfies the selected policy. Exact holdings and allocation values remain private."}
+              </p>
+              <small>Generated locally from evaluation state. No external explanation service receives portfolio data.</small>
             </div>
           ) : null}
         </div>

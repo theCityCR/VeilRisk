@@ -8,7 +8,6 @@ import {
   VerificationError,
   createLaceConnector,
   createVeilRiskMidnightBinding,
-  requestApprovedExplanation,
   runMidnightCallLifecycle,
   verifyPortfolio,
   verifyPortfolioOnMidnight,
@@ -53,9 +52,6 @@ function createPorts(failOnceAt) {
           policyName: "Conservative mandate",
           compliant: true,
         }),
-      },
-      ai: {
-        explain: (packet) => invoke("ai", `Explanation for ${packet.policyName}`),
       },
     },
   };
@@ -158,51 +154,6 @@ describe("injectable verification workflow", () => {
     );
   });
 
-  test("AI receives a reconstructed disclosure packet without extra private fields", async () => {
-    let received;
-    const ai = {
-      explain: async (packet) => {
-        received = packet;
-        return "Approved explanation";
-      },
-    };
-    const untrustedPacket = {
-      policyName: "Conservative mandate",
-      compliant: true,
-      disclosedViolations: [],
-      userApprovedDetailLevel: "result-only",
-      allocation: validAllocation,
-    };
-
-    assert.equal(await requestApprovedExplanation(ai, untrustedPacket), "Approved explanation");
-    assert.deepEqual(received, {
-      policyName: "Conservative mandate",
-      compliant: true,
-      disclosedViolations: [],
-      userApprovedDetailLevel: "result-only",
-    });
-    assert.equal("allocation" in received, false);
-  });
-
-  test("an injected AI failure can be retried", async () => {
-    let attempts = 0;
-    const ai = {
-      explain: async () => {
-        attempts += 1;
-        if (attempts === 1) throw new Error("AI unavailable");
-        return "Recovered explanation";
-      },
-    };
-    const packet = {
-      policyName: "Conservative mandate",
-      compliant: true,
-      disclosedViolations: [],
-      userApprovedDetailLevel: "result-only",
-    };
-
-    await assert.rejects(requestApprovedExplanation(ai, packet), /AI unavailable/);
-    assert.equal(await requestApprovedExplanation(ai, packet), "Recovered explanation");
-  });
 });
 
 describe("generated Midnight binding adapter", () => {

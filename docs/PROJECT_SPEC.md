@@ -8,13 +8,13 @@ Midnight Hackathon: August 2026.
 The application lets a person prove that a private portfolio allocation follows
 a public risk policy without revealing the allocation itself. It demonstrates a
 useful boundary between private financial information, deterministic compliance
-logic, public verification, and an AI-generated explanation.
+logic, and public verification.
 
 The project should be credible as both:
 
 - a focused hackathon submission with a polished two-minute demonstration; and
 - a resume project showing privacy engineering, zero-knowledge proofs,
-  TypeScript, smart-contract integration, testing, and careful AI system design.
+  TypeScript, smart-contract integration, and testing.
 
 VeilRisk is not a trading system, portfolio optimizer, brokerage integration, or
 source of financial advice.
@@ -33,8 +33,8 @@ A successful demonstration should show this sequence:
 5. The browser generates and submits a Midnight zero-knowledge proof.
 6. A public verification view shows a valid attestation without showing the
    private inputs.
-7. An AI explanation receives only an approved disclosure packet and explains
-   the outcome in plain language.
+7. A deterministic local summary explains what was verified and what remained
+   private.
 
 The memorable product moment is the contrast between the **Private Portfolio**
 view and the **Public Attestation** view.
@@ -48,7 +48,7 @@ The hackathon MVP is complete when:
 - a policy contract can be deployed or joined on the selected network;
 - a valid private allocation produces a real finalized Midnight transaction;
 - raw allocation values never appear in public contract state, transaction
-  metadata, logs, analytics, or an AI request;
+  metadata, logs, analytics, URLs, storage, or external requests;
 - an invalid allocation fails before submission and creates no public failure
   record;
 - the UI clearly distinguishes local evaluation from on-chain verification;
@@ -93,8 +93,8 @@ Implement these only after the complete proof flow works:
 - a shareable verification route;
 - a downloadable verification receipt;
 - more expressive asset classes or weighted risk scores; and
-- a polished AI reallocation explanation based on explicitly disclosed
-  category-level information.
+- an optional AI explanation based only on explicitly disclosed public policy
+  outcomes, with a separately reviewed privacy boundary.
 
 ### Explicit non-goals
 
@@ -117,18 +117,18 @@ Implement these only after the complete proof flow works:
 | Contract address and successful transaction | Public |
 | Exact reason an attempted proof failed | Local only |
 | Successful compliance result | Public and verifiable |
-| AI disclosure packet | Only the minimum fields approved by the user |
-| AI-generated explanation | Visible to the user; public only if shared |
+| Privacy-safe summary | Deterministic and generated locally |
 
 Important rules:
 
-1. Compliance must be calculated by deterministic code and the Compact
-   circuit—not by an AI model.
+1. Compliance must be calculated by deterministic code and the Compact circuit.
+   The privacy summary must be derived deterministically from local evaluation
+   or finalized verification state.
 2. An invalid allocation should fail locally and should not publish a failure
    transaction. Publishing failures would leak information about the user's
    private state.
-3. Logs must never include raw allocations, wallet secrets, private-state
-   material, or full AI prompts containing sensitive values.
+3. Logs and external requests must never include raw allocations, wallet
+   secrets, or private-state material.
 4. The interface must not label a simulated delay or local calculation as a
    zero-knowledge proof after real Midnight integration begins.
 5. The README and demo must distinguish implemented guarantees from planned
@@ -146,9 +146,8 @@ Private browser state
           └──> Midnight private circuit inputs
                   └──> Compact assertions
                           └──> finalized public success transaction
-                                  ├──> public verification UI
-                                  └──> minimal disclosure packet
-                                          └──> AI explanation
+                                  └──> public verification UI
+                                          └──> deterministic local summary
 ```
 
 ### Components
@@ -163,7 +162,7 @@ Responsibilities:
 - connect to Lace;
 - display proof-generation and transaction status;
 - show a public-safe attestation; and
-- construct the minimum AI disclosure packet.
+- show a deterministic local privacy summary.
 
 #### Deterministic policy module
 
@@ -195,22 +194,11 @@ This layer should own:
 
 UI components should not contain Midnight SDK plumbing directly.
 
-#### AI explanation adapter
+#### Privacy-safe summary
 
-The AI request should use a strict structured input such as:
-
-```ts
-type DisclosurePacket = {
-  policyName: string;
-  compliant: boolean;
-  disclosedViolations: string[];
-  userApprovedDetailLevel: "result-only" | "category-guidance";
-};
-```
-
-Raw allocation numbers must be excluded by construction. The response should
-explain the verified result and limitations, not provide personalized financial
-advice.
+The browser generates the summary locally from deterministic evaluation state.
+It distinguishes a local preview from a finalized transaction, contains no raw
+allocation values, and makes no request to an external explanation service.
 
 ## 7. Functional requirements
 
@@ -236,11 +224,12 @@ advice.
 - **FR-12:** Clearly identify simulated/local results until a real transaction
   has finalized.
 
-### AI explanation
+### Privacy-safe summary
 
-- **FR-13:** Construct the AI input from approved policy outcomes only.
-- **FR-14:** Validate model output before rendering it.
-- **FR-15:** Fall back to a deterministic explanation if the AI call fails.
+- **FR-13:** Generate the summary locally from deterministic evaluation state.
+- **FR-14:** Distinguish a local preview from a finalized on-chain result.
+- **FR-15:** Never include raw allocation values or make an external explanation
+  request.
 
 ## 8. Build order
 
@@ -252,8 +241,6 @@ advice.
 4. Add simulator tests for boundary values and every failed assertion.
 5. Confirm generated artifacts are ignored or committed according to Midnight's
    recommended template.
-
-Do not work on AI integration before this phase succeeds.
 
 ### Phase 2: Connect Midnight
 
@@ -280,15 +267,7 @@ Replace the current local proof animation with explicit states:
 
 The public panel must show **local preview** until finalization.
 
-### Phase 4: Add the AI explanation
-
-1. Define and test `DisclosurePacket` serialization.
-2. Add a server-side AI endpoint with a strict response schema.
-3. Confirm raw allocations cannot reach the endpoint.
-4. Add a deterministic fallback explanation.
-5. Include a clear non-advice disclaimer.
-
-### Phase 5: Submission polish
+### Phase 4: Submission polish
 
 1. Test the complete flow from a fresh browser session.
 2. Improve mobile layout and keyboard accessibility.
@@ -313,7 +292,7 @@ The public panel must show **local preview** until finalization.
 - Inspect the generated transaction and public ledger state.
 - Search application logs for allocation values and private-state material.
 - Confirm failed local evaluations create no transaction.
-- Inspect the AI request body and confirm it contains no raw allocation.
+- Confirm the privacy-safe summary makes no external request.
 - Confirm browser analytics and error reporting are disabled or sanitized.
 
 ### Product checks
@@ -325,7 +304,7 @@ The public panel must show **local preview** until finalization.
 - The project builds and its tests pass from a clean checkout.
 - The complete demo can be performed in under two minutes.
 
-### AI-assisted development requirements
+### Agent-assisted development requirements
 
 This project assumes that coding agents may implement changes with little human
 supervision. `AGENTS.md` is the authoritative execution policy for agents. At a
@@ -337,8 +316,8 @@ minimum:
 - contract rules must be tested in both the TypeScript policy engine and the
   generated Compact simulator, using matching boundary vectors;
 - every bug fix must include a regression test;
-- wallet, proof-provider, indexer, transaction, and AI dependencies must be
-  mockable so routine CI is deterministic;
+- wallet, proof-provider, indexer, and transaction dependencies must be mockable
+  so routine CI is deterministic;
 - a separate real-Preprod smoke suite must verify the external integration
   without making routine correctness depend on network availability;
 - tests must assert forbidden side effects, including the absence of wallet or
@@ -351,7 +330,7 @@ minimum:
 The browser E2E suite must eventually exercise every available user action and
 must include preset selection, editable inputs, all policy boundaries,
 stale-attestation clearing, wallet rejection and recovery, proof and transaction
-state transitions, public-view privacy, AI disclosure filtering and fallback,
+state transitions, public-view privacy, the deterministic local summary,
 fresh-session behavior, keyboard access, and mobile layout. A feature is not
 complete until its corresponding deterministic E2E coverage lands with it.
 
@@ -371,9 +350,9 @@ Implemented:
   keyboard use, fresh sessions, public-surface privacy, outbound submission
   absence, viewport overflow, unexpected browser errors, Lace absence,
   authorization rejection, disconnection, retry, and recovery;
-- injectable wallet, proof-provider, transaction, indexer, and AI ports with a
+- injectable wallet, proof-provider, transaction, and indexer ports with a
   deterministic orchestration suite covering local short-circuiting, lifecycle
-  order, dependency failures, retry recovery, and disclosure filtering;
+  order, dependency failures, and retry recovery;
 - a browser-ready Midnight.js 4.1.1 adapter that wraps the generated Compact
   binding, serves generated ZK assets from an ignored build path, submits the
   typed `proveCompliance` private inputs, and returns only public transaction
@@ -406,7 +385,8 @@ Implemented:
 - a finalized real browser compliance proof through Lace on Preprod, followed
   by independent indexer inspection confirming successful execution, the fixed
   public policy, one successful proof, and absence of allocation field labels;
-- public-safe explanation copy;
+- a deterministic, public-safe local privacy summary that distinguishes a local
+  preview from finalized verification and makes no external request;
 - verified Compact contract compilation and simulator tests for policy
   boundaries and assertion failures;
 - frontend build, render test, and lint configuration; and
@@ -414,7 +394,6 @@ Implemented:
 
 Not yet implemented or verified:
 
-- AI API integration; and
 - Devpost submission materials.
 
 ## 11. Resume-quality outcome

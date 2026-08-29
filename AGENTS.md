@@ -9,12 +9,12 @@ follow-up work.
 
 - Portfolio allocations, presets, wallet secrets, witness data, and private
   state must never appear in public state, transaction metadata, logs,
-  analytics, error reports, URLs, or AI requests.
+  analytics, error reports, URLs, storage, or external requests.
 - Invalid portfolios must fail locally. They must not create an attestation,
   request a wallet signature, or submit a transaction.
 - Compliance is calculated only by deterministic TypeScript code and the
-  Compact circuit. AI may explain an approved result but must never determine
-  it.
+  Compact circuit. The privacy summary is derived deterministically from local
+  evaluation or finalized verification state.
 - A local or simulated result must be labelled as such. Do not display a fake
   transaction identifier, finalized state, or network verification.
 - The rules in `lib/risk.ts` and `contract/src/veilrisk.compact` must remain
@@ -61,14 +61,14 @@ For every feature, cover as applicable:
 - keyboard and mobile behavior;
 - absence of unexpected console errors and unhandled requests; and
 - privacy: prohibited values must be proven absent from public UI, URLs,
-  storage, logs, requests, transaction data, and AI payloads.
+  storage, logs, requests, and transaction data.
 
 Additional rules:
 
 - Prefer deterministic tests. Freeze time and identifiers where relevant.
-- Mock wallets, proof providers, indexers, AI services, and network failures for
-  routine CI. Keep real Preprod tests in a separate, clearly labelled smoke
-  suite so external instability does not weaken deterministic coverage.
+- Mock wallets, proof providers, indexers, and network failures for routine CI.
+  Keep real Preprod tests in a separate, clearly labelled smoke suite so
+  external instability does not weaken deterministic coverage.
 - Do not use fixed delays when a visible state or event can be awaited.
 - Do not rely on snapshots alone for correctness or privacy assertions.
 - Do not disable, skip, loosen, or delete a test merely to make a change pass.
@@ -93,8 +93,8 @@ The browser E2E suite must cover every user action and at least these journeys:
    finalization.
 8. Proof-provider and transaction failures produce accurate, recoverable UI.
 9. The public attestation never exposes private allocations.
-10. The AI disclosure request contains only schema-approved fields and has a
-    deterministic fallback.
+10. The privacy-safe summary is deterministic, contains no private allocation,
+    and makes no external explanation request.
 11. Refreshing or opening a fresh browser session does not restore stale private
     or verified state.
 12. The complete demo works with keyboard controls and at a mobile viewport.
