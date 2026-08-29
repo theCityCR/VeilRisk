@@ -97,13 +97,14 @@ The command compiles the contract, checks the proof server before requesting a
 secret, and asks for the Lace recovery phrase through a hidden terminal prompt.
 It deliberately accepts no arguments and refuses redirected input, so do not
 put the phrase in an environment variable, command-line argument, project file,
-or chat. It derives the same account locally in process memory, waits up to
-three minutes for Preprod synchronization, confirms that tDUST is available,
-and deploys the fixed Conservative mandate (20% speculative, 70% growth, and
-60% concentration). An interrupted RPC/indexer synchronization is retried up to
-three times with fresh in-memory wallet state; timeouts, empty tDUST, and the
-known intermittent Preprod tDUST synchronization fault remain explicit and
-create no transaction.
+or chat. It derives the same account locally in process memory, waits until
+Preprod synchronization completes, confirms that tDUST is available, and
+deploys the fixed Conservative mandate (20% speculative, 70% growth, and 60%
+concentration). The first headless synchronization can take several minutes and
+prints privacy-safe progress messages while it runs. An interrupted RPC/indexer
+synchronization is retried up to three times with fresh in-memory wallet state;
+empty tDUST and the known intermittent Preprod tDUST synchronization fault
+remain explicit and create no transaction.
 
 After finalization, the command reads the indexed ledger state and confirms the
 three policy limits and an initial proof count of zero. Only then does it update

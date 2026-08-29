@@ -25,7 +25,7 @@ import type {
 } from "@midnight-ntwrk/midnight-js-types";
 import * as bip39 from "@scure/bip39";
 import { wordlist as english } from "@scure/bip39/wordlists/english.js";
-import { firstValueFrom, filter, timeout } from "rxjs";
+import { firstValueFrom, filter, tap } from "rxjs";
 import { WebSocket } from "ws";
 import type { LocalWalletSession } from "./local-preprod-deployment.ts";
 
@@ -66,11 +66,6 @@ function safeWalletSyncError(cause: unknown) {
       "Preprod hit its known intermittent tDUST synchronization fault. No transaction was submitted; wait briefly and retry.",
     );
   }
-  if (cause instanceof Error && cause.name === "TimeoutError") {
-    return new HeadlessWalletError(
-      "The local wallet did not finish Preprod synchronization within three minutes. No transaction was submitted; retry when the network is stable.",
-    );
-  }
   return new HeadlessWalletError(
     "The Preprod RPC or indexer interrupted wallet synchronization. No transaction was submitted; retry the command.",
   );
@@ -86,9 +81,6 @@ export async function retryWalletSynchronization<T>(
       return await attempt();
     } catch (cause) {
       if (cause instanceof HeadlessWalletError) throw cause;
-      if (cause instanceof Error && cause.name === "TimeoutError") {
-        throw safeWalletSyncError(cause);
-      }
       if (attemptNumber === maxAttempts) throw safeWalletSyncError(cause);
       report(
         `Preprod wallet synchronization was interrupted; retrying locally (${attemptNumber + 1}/${maxAttempts})...`,
@@ -96,6 +88,26 @@ export async function retryWalletSynchronization<T>(
     }
   }
   throw new HeadlessWalletError("The local Preprod wallet could not synchronize.");
+}
+
+export async function waitForWalletSynchronization(
+  wallet: Pick<WalletFacade, "state">,
+  report: (message: string) => void = () => {},
+  now: () => number = Date.now,
+) {
+  let lastProgressReport = Number.NEGATIVE_INFINITY;
+  return await firstValueFrom(
+    wallet.state().pipe(
+      tap((state) => {
+        const currentTime = now();
+        if (!state.isSynced && currentTime - lastProgressReport >= 30_000) {
+          report("Wallet synchronization is still running; first-time sync may take several minutes...");
+          lastProgressReport = currentTime;
+        }
+      }),
+      filter((state) => state.isSynced),
+    ),
+  );
 }
 
 export function requireDustBalance(balance: bigint) {
@@ -292,12 +304,7 @@ export async function openHeadlessPreprodWallet(
     let context: WalletContext | undefined;
     try {
       context = await initializeWallet(recoveryPhrase);
-      const synchronizedState = await firstValueFrom(
-        context.wallet.state().pipe(
-          filter((state) => state.isSynced),
-          timeout({ first: 180_000 }),
-        ),
-      );
+      const synchronizedState = await waitForWalletSynchronization(context.wallet, report);
       requireDustBalance(synchronizedState.dust?.balance(new Date()) ?? 0n);
 
       const walletProvider = createWalletProvider(context);

@@ -5,6 +5,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { Subject } from "rxjs";
 import {
   createPublicDeploymentRecord,
   LocalDeploymentCommandError,
@@ -18,6 +19,7 @@ import {
   openHeadlessPreprodWallet,
   requireDustBalance,
   retryWalletSynchronization,
+  waitForWalletSynchronization,
 } from "../lib/headless-midnight-wallet.ts";
 
 const PRIVATE_SENTINEL = "private recovery phrase sentinel";
@@ -166,7 +168,7 @@ test("interrupted Preprod synchronization retries locally and can recover", asyn
   assert.doesNotMatch(JSON.stringify(reports), new RegExp(PRIVATE_SENTINEL));
 });
 
-test("known tDUST sync and timeout failures receive safe specific guidance", async () => {
+test("a known tDUST sync failure receives safe specific guidance", async () => {
   let dustAttempts = 0;
   await assert.rejects(
     retryWalletSynchronization(async () => {
@@ -184,22 +186,35 @@ test("known tDUST sync and timeout failures receive safe specific guidance", asy
     },
   );
   assert.equal(dustAttempts, 3);
+});
 
-  const timeoutError = new Error(PRIVATE_SENTINEL);
-  timeoutError.name = "TimeoutError";
-  let timeoutAttempts = 0;
-  await assert.rejects(
-    retryWalletSynchronization(async () => {
-      timeoutAttempts += 1;
-      throw timeoutError;
-    }),
-    (error) => {
-      assert.match(error.message, /within three minutes/);
-      assert.doesNotMatch(error.message, new RegExp(PRIVATE_SENTINEL));
-      return true;
-    },
-  );
-  assert.equal(timeoutAttempts, 1);
+test("cold wallet synchronization waits for completion and reports public-safe progress", async () => {
+  const states = new Subject();
+  const reports = [];
+  let currentTime = 0;
+  let settled = false;
+  const synchronized = waitForWalletSynchronization(
+    { state: () => states },
+    (message) => reports.push(message),
+    () => currentTime,
+  ).then((state) => {
+    settled = true;
+    return state;
+  });
+
+  states.next({ isSynced: false });
+  currentTime = 180_001;
+  states.next({ isSynced: false });
+  await Promise.resolve();
+  assert.equal(settled, false);
+
+  states.next({ isSynced: true });
+  assert.deepEqual(await synchronized, { isSynced: true });
+  assert.deepEqual(reports, [
+    "Wallet synchronization is still running; first-time sync may take several minutes...",
+    "Wallet synchronization is still running; first-time sync may take several minutes...",
+  ]);
+  assert.doesNotMatch(JSON.stringify(reports), /balance|address|allocation|private/i);
 });
 
 test("local validation failures do not retry wallet synchronization", async () => {
