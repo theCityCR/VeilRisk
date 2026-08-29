@@ -178,9 +178,9 @@ inputs. It exposes policy limits as public state and permits a successful
 transaction only if every policy assertion passes.
 
 The contract compiles, its generated simulator passes shared boundary tests,
-and the fixed policy is deployed on Preprod. The browser call path is connected;
-the first real portfolio-compliance transaction remains pending external smoke
-verification.
+and the fixed policy is deployed on Preprod. The first real browser
+portfolio-compliance transaction finalized successfully and its public
+transaction and ledger state were independently inspected.
 
 #### Midnight integration adapter
 
@@ -403,6 +403,9 @@ Implemented:
 - deterministic desktop and mobile E2E coverage for the successful lifecycle,
   local short-circuiting, deployed-policy mismatch, each external failure, and
   public-panel privacy;
+- a finalized real browser compliance proof through Lace on Preprod, followed
+  by independent indexer inspection confirming successful execution, the fixed
+  public policy, one successful proof, and absence of allocation field labels;
 - public-safe explanation copy;
 - verified Compact contract compilation and simulator tests for policy
   boundaries and assertion failures;
@@ -411,8 +414,6 @@ Implemented:
 
 Not yet implemented or verified:
 
-- one finalized real compliance proof through Lace's configured proving
-  provider, followed by public transaction and ledger inspection;
 - AI API integration; and
 - Devpost submission materials.
 
@@ -425,6 +426,6 @@ integration is working and the claims are verified. A future bullet might be:
 > Compact, generating zero-knowledge proofs that allocation constraints were
 > satisfied without publishing private portfolio weights.
 
-Do not use that wording until a real Compact proof has been compiled, executed,
-and inspected. If only the interactive prototype is completed, describe it as a
-prototype and do not claim implemented zero-knowledge verification.
+This wording is now supported by the finalized and independently inspected
+Preprod browser transaction recorded in `docs/PREPROD_DEPLOYMENT.md`. It does
+not imply a security audit or production-readiness review.

@@ -44,3 +44,31 @@ Midnight SDK transaction objects may include wallet-related transport data that
 is irrelevant to the public policy receipt. Automated deployment tests instead
 assert both that only the three policy arguments are supplied and that private
 deployment data is absent from the returned and persisted receipt.
+
+## Verified browser compliance proof
+
+The first real browser compliance proof was finalized through Lace on August
+29, 2026. A separate read-only query to the Preprod indexer returned:
+
+- submitted transaction identifier:
+  `00cdb054a10b8d370323e468acf23ca642fdd2ca1080d7ac56c830df571ae6aadf`;
+- transaction status: `SucceedEntirely`;
+- block height: `2320472`;
+- block timestamp: `2026-08-29 20:30:06 UTC`;
+- indexer transaction ID: `577609`;
+- transaction hash:
+  `c8f3f37ae179e9d1cb92d28e56cab11c50b1e80bc7ea0c1d8255737a14c492d2`;
+- the submitted identifier was present in the transaction's public
+  `identifiers` collection; and
+- the decoded ledger contained speculative cap `2000`, growth cap `7000`,
+  single-bucket cap `6000`, and `successfulProofs = 1`.
+
+The indexed transaction response exposed only standard transaction, status,
+identifier, block, segment-status, unshielded-transport, protocol, and fee
+fields. A case-insensitive scan found no `allocation`, `portfolio`, `cash`,
+`bonds`, `equities`, or `speculativeBps` field or label. The browser receipt
+likewise displayed only the public policy name, network, contract address,
+transaction identifier, compliance outcome, and `Holdings disclosed: None`.
+The four private allocation values used by the browser were also absent as
+decoded public transaction values. No raw SDK transaction object is stored in
+the repository.

@@ -144,8 +144,6 @@ maintenance workflow; the deployed policy is intended to remain fixed.
 
 ## Focused roadmap
 
-- Complete one real browser compliance transaction on Preprod and inspect its
-  indexed public state and transaction data.
 - Send only approved policy outcomes to the AI explanation endpoint.
 - Record the required two-minute public demo.
 
@@ -165,8 +163,9 @@ the Midnight.js contract preparation, proof, balance/approval, submission, and
 finalization details. The pinned Midnight runtime dependencies match Compact
 toolchain 0.31.1. Lace discovery, Preprod validation, wallet-delegated providers,
 the verified deployed contract, and the browser transaction lifecycle are
-implemented. The first real browser compliance call remains a clearly labelled
-external Preprod smoke milestone until it is finalized and inspected.
+implemented. The first real browser compliance call has finalized successfully
+and its indexed public transaction and ledger state are recorded in
+[`docs/PREPROD_DEPLOYMENT.md`](docs/PREPROD_DEPLOYMENT.md).
 
 This repository is intentionally scoped to a demonstrable privacy boundary. It
 does not execute trades, connect to brokerages, or provide financial advice.
