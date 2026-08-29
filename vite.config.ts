@@ -1,6 +1,10 @@
 import { sites } from "@openai/sites-vite-plugin";
+import { viteCommonjs } from "@originjs/vite-plugin-commonjs";
+import { resolve } from "node:path";
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
+import wasm from "vite-plugin-wasm";
 import hostingConfig from "./.openai/hosting.json";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
@@ -44,16 +48,52 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
-    server: isCodexSeatbeltSandbox
-      ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+    define: {
+      "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "development"),
+      "process.env": {},
+      global: "globalThis",
+    },
+    server: {
+      fs: { allow: [".."] },
+      watch: isCodexSeatbeltSandbox
+        ? { useFsEvents: false, usePolling: true }
+        : undefined,
+    },
     plugins: [
+      nodePolyfills({
+        include: ["assert", "buffer", "process"],
+        globals: { Buffer: true, process: true },
+      }),
+      wasm(),
       vinext(),
       sites(),
+      viteCommonjs(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,
       }),
     ],
+    optimizeDeps: {
+      include: [
+        "@midnight-ntwrk/compact-runtime",
+        "@midnight-ntwrk/dapp-connector-api",
+        "@midnight-ntwrk/midnight-js-contracts",
+        "@midnight-ntwrk/midnight-js-fetch-zk-config-provider",
+        "@midnight-ntwrk/midnight-js-indexer-public-data-provider",
+        "@midnight-ntwrk/midnight-js-network-id",
+        "@midnight-ntwrk/midnight-js-protocol",
+        "@midnight-ntwrk/midnight-js-types",
+        "rxjs",
+      ],
+      exclude: ["@midnight-ntwrk/onchain-runtime-v3"],
+    },
+    build: {
+      commonjsOptions: { transformMixedEsModules: true },
+    },
+    resolve: {
+      alias: {
+        "isomorphic-ws": resolve("lib/websocket-browser.ts"),
+      },
+    },
   };
 });

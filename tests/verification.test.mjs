@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
 import {
+  LaceConnectorError,
   VerificationError,
+  createLaceConnector,
   createVeilRiskMidnightBinding,
   requestApprovedExplanation,
   verifyPortfolio,
@@ -333,5 +335,214 @@ describe("generated Midnight binding adapter", () => {
       }),
       (error) => error instanceof VerificationError && error.stage === "midnight",
     );
+  });
+});
+
+describe("Lace connector and provider configuration", () => {
+  const apiError = (code) => Object.assign(new Error("wallet detail must stay private"), {
+    type: "DAppConnectorAPIError",
+    code,
+    reason: "private connector reason",
+  });
+
+  function createLaceHarness(overrides = {}) {
+    const calls = [];
+    let connected = true;
+    let connectAttempts = 0;
+    let proofAttempts = 0;
+    const connectedApi = {
+      async getConnectionStatus() {
+        calls.push("status");
+        return connected
+          ? { status: "connected", networkId: "preprod" }
+          : { status: "disconnected" };
+      },
+      async hintUsage(methods) {
+        calls.push(["hint", ...methods]);
+        if (overrides.hintError) throw overrides.hintError;
+      },
+      async getConfiguration() {
+        calls.push("configuration");
+        return {
+          indexerUri: "https://indexer.preprod.midnight.network/api/v3/graphql",
+          indexerWsUri: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
+          substrateNodeUri: "https://rpc.preprod.midnight.network",
+          networkId: overrides.configNetwork ?? "preprod",
+        };
+      },
+      async getShieldedAddresses() {
+        calls.push("addresses");
+        return {
+          shieldedAddress: "private_wallet_address",
+          shieldedCoinPublicKey: "mn_shield-pub_preprod1privatecoin",
+          shieldedEncryptionPublicKey: "mn_shield-epk_preprod1privateencryption",
+        };
+      },
+      async getProvingProvider() {
+        calls.push("proving-provider");
+        proofAttempts += 1;
+        if (overrides.proofErrorOnce && proofAttempts === 1) throw overrides.proofErrorOnce;
+        return {
+          check: async () => [],
+          prove: async () => new Uint8Array([1]),
+        };
+      },
+      async balanceUnsealedTransaction() {
+        calls.push("balance");
+        if (overrides.balanceError) throw overrides.balanceError;
+        return { tx: "00" };
+      },
+      async submitTransaction() {
+        calls.push("submit-transaction");
+        if (overrides.submitError) throw overrides.submitError;
+      },
+    };
+    const initialApi = {
+      rdns: "io.midnight.lace",
+      name: "  Lace <wallet>  ",
+      icon: "data:image/svg+xml,ignored",
+      apiVersion: overrides.apiVersion ?? "4.0.1",
+      async connect(network) {
+        calls.push(["connect", network]);
+        connectAttempts += 1;
+        if (overrides.connectErrorOnce && connectAttempts === 1) throw overrides.connectErrorOnce;
+        connected = true;
+        return connectedApi;
+      },
+    };
+    const connector = createLaceConnector({
+      network: "preprod",
+      compiledAssetsBaseUrl: "https://veilrisk.example/contract/veilrisk",
+      getWalletRegistry: () => overrides.noWallet
+        ? undefined
+        : overrides.unrelatedWallet
+          ? { anotherWallet: { ...initialApi, rdns: "example.wallet", name: "Another wallet" } }
+          : { mnLace: initialApi },
+      fetch: async () => { throw new Error("No asset fetch is expected during setup."); },
+    });
+    return {
+      calls,
+      connector,
+      connectedApi,
+      disconnect: () => { connected = false; },
+    };
+  }
+
+  test("missing and incompatible wallets fail without external requests", async () => {
+    for (const [overrides, reason] of [
+      [{ noWallet: true }, "unavailable"],
+      [{ unrelatedWallet: true }, "unavailable"],
+      [{ apiVersion: "3.0.0" }, "incompatible"],
+    ]) {
+      const { connector, calls } = createLaceHarness(overrides);
+      await assert.rejects(
+        connector.connect(),
+        (error) => error instanceof LaceConnectorError && error.reason === reason,
+      );
+      assert.deepEqual(calls, []);
+    }
+  });
+
+  test("connects on Preprod and configures wallet-delegated proving without exposing wallet data", async () => {
+    const { connector, calls } = createLaceHarness();
+    const summary = await connector.connect();
+    const providers = await connector.getProviders();
+
+    assert.deepEqual(summary, {
+      walletName: "Lace <wallet>",
+      apiVersion: "4.0.1",
+      network: "preprod",
+      proofMode: "wallet-delegated",
+    });
+    assert.ok(providers.zkConfigProvider);
+    assert.ok(providers.proofProvider);
+    assert.ok(providers.publicDataProvider);
+    assert.ok(providers.walletProvider);
+    assert.ok(providers.midnightProvider);
+    assert.equal(JSON.stringify(summary).includes("private_wallet_address"), false);
+    assert.equal(JSON.stringify(summary).includes("privatecoin"), false);
+    assert.deepEqual(calls[0], ["connect", "preprod"]);
+    assert.ok(calls.some((call) => Array.isArray(call) && call[0] === "hint"));
+  });
+
+  test("permission and proof-provider failures can be retried", async () => {
+    for (const [overrides, reason] of [
+      [{ connectErrorOnce: apiError("PermissionRejected") }, "permission-rejected"],
+      [{ proofErrorOnce: new Error("proof setup unavailable") }, "proof-provider-unavailable"],
+    ]) {
+      const { connector } = createLaceHarness(overrides);
+      await assert.rejects(
+        connector.connect(),
+        (error) => error instanceof LaceConnectorError && error.reason === reason,
+      );
+      assert.equal((await connector.connect()).proofMode, "wallet-delegated");
+    }
+  });
+
+  test("a disconnected session fails closed and reconnects cleanly", async () => {
+    const { connector, disconnect } = createLaceHarness();
+    await connector.connect();
+    disconnect();
+
+    await assert.rejects(
+      connector.checkConnection(),
+      (error) => error instanceof LaceConnectorError && error.reason === "disconnected",
+    );
+    assert.equal((await connector.connect()).network, "preprod");
+  });
+
+  test("signature and submission rejections are classified without leaking connector details", async () => {
+    const signatureHarness = createLaceHarness({ balanceError: apiError("Rejected") });
+    await signatureHarness.connector.connect();
+    const signatureProviders = await signatureHarness.connector.getProviders();
+    await assert.rejects(
+      signatureProviders.walletProvider.balanceTx({ serialize: () => new Uint8Array([1]) }),
+      (error) => error instanceof LaceConnectorError
+        && error.reason === "signature-rejected"
+        && !error.message.includes("wallet detail"),
+    );
+
+    const submissionHarness = createLaceHarness({ submitError: apiError("Rejected") });
+    await submissionHarness.connector.connect();
+    const submissionProviders = await submissionHarness.connector.getProviders();
+    await assert.rejects(
+      submissionProviders.midnightProvider.submitTx({
+        serialize: () => new Uint8Array([1]),
+        identifiers: () => ["public_transaction_id"],
+      }),
+      (error) => error instanceof LaceConnectorError
+        && error.reason === "submission-rejected"
+        && !error.message.includes("wallet detail"),
+    );
+  });
+
+  test("signature rejection maps to the signature stage and a retry can recover", async () => {
+    let reject = true;
+    const states = [];
+    const midnight = {
+      connect: async () => ({}),
+      submitCompliance: async () => {
+        if (reject) throw new LaceConnectorError("signature-rejected");
+        return {
+          transactionId: "public_transaction_id",
+          network: "preprod",
+          contractAddress: "public_contract_address",
+        };
+      },
+    };
+    const input = {
+      allocation: validAllocation,
+      policy: defaultPolicy,
+      policyName: "Conservative mandate",
+    };
+
+    await assert.rejects(
+      verifyPortfolioOnMidnight(midnight, input, (state) => states.push(state)),
+      (error) => error instanceof VerificationError && error.stage === "signature",
+    );
+    assert.deepEqual(states.at(-1), { status: "failed", stage: "signature" });
+
+    reject = false;
+    assert.equal((await verifyPortfolioOnMidnight(midnight, input)).status, "finalized");
   });
 });

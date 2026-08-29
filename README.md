@@ -21,8 +21,10 @@ and never create a shareable preview. `contract/src/veilrisk.compact` contains
 the matching Compact circuit. Both engines run the same shared basis-point
 boundary vectors in tests. A browser-ready adapter now wraps the generated
 contract binding and finalized Midnight.js call while returning only public
-transaction identifiers. Connecting that adapter to Lace is the next
-integration milestone.
+transaction identifiers. The browser now discovers Lace's version 4 connector,
+checks its Preprod configuration, and prepares wallet-delegated proving,
+balancing, submission, and indexer providers without requesting a proof or
+signature during setup.
 
 ## Privacy boundary
 
@@ -76,15 +78,17 @@ npm run compact
 npm test
 ```
 
-Midnight's proof server and a Lace wallet configured for Preprod are required
-for the final browser-to-chain integration.
+A Lace wallet configured for Preprod is required for browser setup. Lace
+delegates proving to the provider selected in the wallet; real proof generation
+and submission still require reachable Preprod services and a deployed VeilRisk
+contract.
 
 ## Focused roadmap
 
-- Connect Lace providers to the generated-binding adapter.
 - Deploy/join the risk-policy contract on Preprod.
-- Replace the local proof animation with the real transaction lifecycle.
-- Expand browser E2E coverage with mocked wallet and transaction journeys.
+- Connect the prepared Lace providers to the browser verification action.
+- Replace the local preview action with the real proof and transaction lifecycle.
+- Expand browser E2E coverage with mocked proof and transaction journeys.
 - Send only approved policy outcomes to the AI explanation endpoint.
 - Record the required two-minute public demo.
 
@@ -101,8 +105,9 @@ scripts/             Reproducible generated-asset preparation
 
 The verification layer accepts deterministic fakes for routine tests and owns
 the Midnight.js `CompiledContract` and `submitCallTx` details. The pinned
-Midnight runtime dependencies match Compact toolchain 0.31.1. Lace provider
-creation and real Preprod verification remain separate integration milestones.
+Midnight runtime dependencies match Compact toolchain 0.31.1. Lace discovery,
+Preprod validation, and wallet-delegated provider creation are implemented;
+contract deployment and real Preprod verification remain separate milestones.
 
 This repository is intentionally scoped to a demonstrable privacy boundary. It
 does not execute trades, connect to brokerages, or provide financial advice.

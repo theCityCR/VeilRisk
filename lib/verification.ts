@@ -1,5 +1,15 @@
+import { ErrorCodes, type ConnectedAPI, type InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
+import { FetchZkConfigProvider } from "@midnight-ntwrk/midnight-js-fetch-zk-config-provider";
+import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
+import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 import { submitCallTx } from "@midnight-ntwrk/midnight-js-contracts";
 import { CompiledContract } from "@midnight-ntwrk/midnight-js-protocol/compact-js";
+import * as midnightLedger from "@midnight-ntwrk/midnight-js-protocol/ledger";
+import {
+  createProofProvider,
+  type MidnightProvider,
+  type WalletProvider,
+} from "@midnight-ntwrk/midnight-js-types";
 import { Contract as VeilRiskContract } from "../contract/src/managed/veilrisk/contract/index.js";
 import { evaluatePortfolio, type Allocation, type RiskPolicy } from "./risk.ts";
 
@@ -66,6 +76,39 @@ type SubmitMidnightCall = (
   options: MidnightCallOptions,
 ) => Promise<FinalizedMidnightCall>;
 
+export type LaceFailureReason =
+  | "unavailable"
+  | "incompatible"
+  | "permission-rejected"
+  | "network-mismatch"
+  | "disconnected"
+  | "configuration-invalid"
+  | "proof-provider-unavailable"
+  | "signature-rejected"
+  | "submission-rejected"
+  | "unknown";
+
+export type LaceConnectionSummary = Readonly<{
+  walletName: string;
+  apiVersion: string;
+  network: string;
+  proofMode: "wallet-delegated";
+}>;
+
+export type LaceConnectorPort = Readonly<{
+  connect: () => Promise<LaceConnectionSummary>;
+  checkConnection: () => Promise<LaceConnectionSummary>;
+  getProviders: () => Promise<MidnightProviders>;
+  clear: () => void;
+}>;
+
+export type LaceConnectorConfig = Readonly<{
+  network: string;
+  compiledAssetsBaseUrl: string;
+  getWalletRegistry: () => Record<string, InitialAPI> | undefined;
+  fetch: typeof globalThis.fetch;
+}>;
+
 export type MidnightBindingPort = Readonly<{
   connect: () => Promise<MidnightProviders>;
   submitCompliance: (
@@ -104,6 +147,304 @@ export class VerificationError extends Error {
     super(`Verification failed during ${stage}.`, { cause });
     this.name = "VerificationError";
     this.stage = stage;
+  }
+}
+
+export class LaceConnectorError extends Error {
+  readonly reason: LaceFailureReason;
+
+  constructor(reason: LaceFailureReason, cause?: unknown) {
+    super(`Lace connection failed: ${reason}.`, { cause });
+    this.name = "LaceConnectorError";
+    this.reason = reason;
+  }
+}
+
+export function getLaceFailureMessage(reason: LaceFailureReason) {
+  switch (reason) {
+    case "unavailable":
+      return "Lace was not found. Install or enable the Midnight Lace extension, then retry.";
+    case "incompatible":
+      return "The detected wallet does not support the required Lace connector API version 4.";
+    case "permission-rejected":
+      return "Wallet authorization was rejected. You can retry when you are ready.";
+    case "network-mismatch":
+      return "Lace is connected to a different network. Switch it to Preprod, then retry.";
+    case "disconnected":
+      return "The Lace connection was lost. Reconnect the wallet to continue.";
+    case "configuration-invalid":
+      return "Lace returned incomplete network configuration. Check the wallet network settings.";
+    case "proof-provider-unavailable":
+      return "Lace could not configure its proving provider. Check its proof settings, then retry.";
+    case "signature-rejected":
+      return "The wallet signature was rejected. No transaction was submitted; you can retry.";
+    case "submission-rejected":
+      return "Lace rejected transaction submission. Review the wallet state, then retry.";
+    default:
+      return "Lace could not be connected. Check the wallet and retry.";
+  }
+}
+
+function connectorCode(cause: unknown) {
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) return undefined;
+  return String(cause.code);
+}
+
+function connectionFailure(cause: unknown) {
+  const code = connectorCode(cause);
+  if (code === ErrorCodes.PermissionRejected || code === ErrorCodes.Rejected) {
+    return new LaceConnectorError("permission-rejected", cause);
+  }
+  if (code === ErrorCodes.Disconnected) {
+    return new LaceConnectorError("disconnected", cause);
+  }
+  return new LaceConnectorError("unknown", cause);
+}
+
+function transactionFailure(
+  cause: unknown,
+  rejectedReason: "signature-rejected" | "submission-rejected",
+) {
+  const code = connectorCode(cause);
+  if (code === ErrorCodes.PermissionRejected || code === ErrorCodes.Rejected) {
+    return new LaceConnectorError(rejectedReason, cause);
+  }
+  if (code === ErrorCodes.Disconnected) {
+    return new LaceConnectorError("disconnected", cause);
+  }
+  return cause;
+}
+
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytes(value: string) {
+  if (!/^(?:[0-9a-fA-F]{2})+$/.test(value)) {
+    throw new LaceConnectorError("configuration-invalid");
+  }
+  return Uint8Array.from(value.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+}
+
+function sanitizeWalletLabel(value: string) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length === 0 ? "Midnight wallet" : normalized.slice(0, 80);
+}
+
+function requireServiceUrl(value: string, protocols: readonly string[]) {
+  try {
+    const url = new URL(value);
+    if (!protocols.includes(url.protocol)) throw new Error("Unsupported protocol");
+    return url.toString();
+  } catch (cause) {
+    throw new LaceConnectorError("configuration-invalid", cause);
+  }
+}
+
+async function requireConnected(wallet: ConnectedAPI, network: string) {
+  let status;
+  try {
+    status = await wallet.getConnectionStatus();
+  } catch (cause) {
+    throw connectionFailure(cause);
+  }
+  if (status.status !== "connected") {
+    throw new LaceConnectorError("disconnected");
+  }
+  if (status.networkId !== network) {
+    throw new LaceConnectorError("network-mismatch");
+  }
+}
+
+export function createLaceConnector(config: LaceConnectorConfig): LaceConnectorPort {
+  const network = requirePublicIdentifier(config.network, "Midnight network").toLowerCase();
+  const compiledAssetsBaseUrl = requirePublicIdentifier(
+    config.compiledAssetsBaseUrl,
+    "Compiled asset base URL",
+  ).replace(/\/$/, "");
+  let wallet: ConnectedAPI | undefined;
+  let providers: MidnightProviders | undefined;
+  let summary: LaceConnectionSummary | undefined;
+
+  const clear = () => {
+    wallet = undefined;
+    providers = undefined;
+    summary = undefined;
+  };
+
+  const checkConnection = async () => {
+    if (!wallet || !summary) throw new LaceConnectorError("disconnected");
+    try {
+      await requireConnected(wallet, network);
+      return summary;
+    } catch (cause) {
+      clear();
+      throw cause;
+    }
+  };
+
+  const connect = async () => {
+    clear();
+    const registry = config.getWalletRegistry();
+    const candidates = registry ? Object.entries(registry) : [];
+    const selected = candidates.find(([key]) => key === "mnLace")?.[1]
+      ?? candidates.find(([, api]) => /lace/i.test(`${api.rdns} ${api.name}`))?.[1];
+    if (!selected) throw new LaceConnectorError("unavailable");
+    if (Number.parseInt(selected.apiVersion.split(".")[0] ?? "", 10) !== 4) {
+      throw new LaceConnectorError("incompatible");
+    }
+
+    let connected: ConnectedAPI;
+    try {
+      connected = await selected.connect(network);
+      await requireConnected(connected, network);
+      await connected.hintUsage([
+        "getShieldedAddresses",
+        "getProvingProvider",
+        "balanceUnsealedTransaction",
+        "submitTransaction",
+      ]);
+    } catch (cause) {
+      if (cause instanceof LaceConnectorError) throw cause;
+      throw connectionFailure(cause);
+    }
+
+    const walletConfig = await connected.getConfiguration().catch((cause) => {
+      throw connectionFailure(cause);
+    });
+    if (walletConfig.networkId !== network) {
+      throw new LaceConnectorError("network-mismatch");
+    }
+    const indexerUri = requireServiceUrl(walletConfig.indexerUri, ["http:", "https:"]);
+    const indexerWsUri = requireServiceUrl(walletConfig.indexerWsUri, ["ws:", "wss:"]);
+    requireServiceUrl(walletConfig.substrateNodeUri, ["http:", "https:", "ws:", "wss:"]);
+
+    const addresses = await connected.getShieldedAddresses().catch((cause) => {
+      throw connectionFailure(cause);
+    });
+    if (!addresses.shieldedCoinPublicKey.trim() || !addresses.shieldedEncryptionPublicKey.trim()) {
+      throw new LaceConnectorError("configuration-invalid");
+    }
+
+    setNetworkId(network);
+    const zkConfigProvider = new FetchZkConfigProvider<"proveCompliance">(
+      compiledAssetsBaseUrl,
+      config.fetch,
+    );
+    let proofProvider;
+    try {
+      const provingProvider = await connected.getProvingProvider(
+        zkConfigProvider.asKeyMaterialProvider(),
+      );
+      proofProvider = createProofProvider(provingProvider);
+    } catch (cause) {
+      const code = connectorCode(cause);
+      if (code === ErrorCodes.PermissionRejected || code === ErrorCodes.Rejected) {
+        throw new LaceConnectorError("permission-rejected", cause);
+      }
+      if (code === ErrorCodes.Disconnected) {
+        throw new LaceConnectorError("disconnected", cause);
+      }
+      throw new LaceConnectorError("proof-provider-unavailable", cause);
+    }
+
+    const walletProvider: WalletProvider = {
+      getCoinPublicKey: () => addresses.shieldedCoinPublicKey as midnightLedger.CoinPublicKey,
+      getEncryptionPublicKey: () => addresses.shieldedEncryptionPublicKey as midnightLedger.EncPublicKey,
+      async balanceTx(tx) {
+        try {
+          await requireConnected(connected, network);
+          const result = await connected.balanceUnsealedTransaction(
+            bytesToHex(tx.serialize()),
+            { payFees: true },
+          );
+          return midnightLedger.Transaction.deserialize(
+            "signature",
+            "proof",
+            "binding",
+            hexToBytes(result.tx),
+          ) as midnightLedger.FinalizedTransaction;
+        } catch (cause) {
+          throw transactionFailure(cause, "signature-rejected");
+        }
+      },
+    };
+
+    const midnightProvider: MidnightProvider = {
+      async submitTx(tx) {
+        try {
+          await requireConnected(connected, network);
+          await connected.submitTransaction(bytesToHex(tx.serialize()));
+          const transactionId = tx.identifiers()[0];
+          if (!transactionId) throw new Error("Finalized transaction has no identifier.");
+          return transactionId;
+        } catch (cause) {
+          throw transactionFailure(cause, "submission-rejected");
+        }
+      },
+    };
+
+    wallet = connected;
+    providers = {
+      zkConfigProvider,
+      proofProvider,
+      publicDataProvider: indexerPublicDataProvider(indexerUri, indexerWsUri),
+      walletProvider,
+      midnightProvider,
+    };
+    summary = {
+      walletName: sanitizeWalletLabel(selected.name),
+      apiVersion: selected.apiVersion,
+      network,
+      proofMode: "wallet-delegated",
+    };
+    return summary;
+  };
+
+  return {
+    connect,
+    checkConnection,
+    async getProviders() {
+      await checkConnection();
+      if (!providers) throw new LaceConnectorError("disconnected");
+      return providers;
+    },
+    clear,
+  };
+}
+
+export function createBrowserLaceConnector(
+  network = "preprod",
+  compiledAssetsBaseUrl = `${globalThis.location.origin}/contract/veilrisk`,
+) {
+  return createLaceConnector({
+    network,
+    compiledAssetsBaseUrl,
+    getWalletRegistry: () => (
+      globalThis as typeof globalThis & { midnight?: Record<string, InitialAPI> }
+    ).midnight,
+    fetch: globalThis.fetch.bind(globalThis),
+  });
+}
+
+function findLaceConnectorError(cause: unknown, depth = 0): LaceConnectorError | undefined {
+  if (cause instanceof LaceConnectorError) return cause;
+  if (depth >= 4 || !(cause instanceof Error)) return undefined;
+  return findLaceConnectorError(cause.cause, depth + 1);
+}
+
+function stageForMidnightFailure(cause: unknown): ExternalStage {
+  switch (findLaceConnectorError(cause)?.reason) {
+    case "signature-rejected":
+      return "signature";
+    case "submission-rejected":
+      return "submission";
+    case "disconnected":
+      return "wallet";
+    case "proof-provider-unavailable":
+      return "proof";
+    default:
+      return "midnight";
   }
 }
 
@@ -205,8 +546,9 @@ export async function verifyPortfolioOnMidnight(
     onState({ status: "finalized", attestation });
     return result;
   } catch (cause) {
-    onState({ status: "failed", stage: "midnight" });
-    throw new VerificationError("midnight", cause);
+    const stage = stageForMidnightFailure(cause);
+    onState({ status: "failed", stage });
+    throw new VerificationError(stage, cause);
   }
 }
 

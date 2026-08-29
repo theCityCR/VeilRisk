@@ -9,6 +9,26 @@ const allocationLabels = {
 };
 const browserIssues = new WeakMap<import("@playwright/test").Page, string[]>();
 
+test.beforeAll(async ({ browser }) => {
+  // The Vinext development server performs one full reload when the lazily
+  // loaded Midnight SDK is transformed for the first time. Warm that module
+  // before assertions begin so the parallel dependency optimizer cannot
+  // interrupt a user interaction under test.
+  const page = await browser.newPage();
+  await page.goto("/");
+  await page.waitForFunction(() => typeof document.querySelector<HTMLButtonElement>(".prove-button")?.onclick === "function");
+
+  const reloaded = page.waitForEvent("framenavigated").then(() => true, () => false);
+  const unavailable = page.getByRole("alert").waitFor().then(() => false, () => false);
+  await page.getByRole("button", { name: "Connect Lace" }).click();
+  if (await Promise.race([reloaded, unavailable])) {
+    await page.waitForFunction(() => typeof document.querySelector<HTMLButtonElement>(".prove-button")?.onclick === "function");
+    await page.getByRole("button", { name: "Connect Lace" }).click();
+    await page.getByRole("alert").waitFor();
+  }
+  await page.close();
+});
+
 test.afterEach(async ({ page }) => {
   expect(browserIssues.get(page) ?? []).toEqual([]);
 });
@@ -32,6 +52,74 @@ async function openInteractiveApp(page: import("@playwright/test").Page) {
     throw new Error(`The application did not become interactive: ${issues.join(" | ") || "no browser error was reported"}`);
   }
   expect(issues).toEqual([]);
+}
+
+async function installMockLace(
+  page: import("@playwright/test").Page,
+  options: { rejectFirstConnection?: boolean; rejectFirstProofProvider?: boolean } = {},
+) {
+  await page.addInitScript(({ rejectFirstConnection, rejectFirstProofProvider }) => {
+    const runtime = window as unknown as {
+      __laceConnected: boolean;
+      __laceConnectAttempts: number;
+      __laceProofAttempts: number;
+      midnight: Record<string, unknown>;
+    };
+    runtime.__laceConnected = true;
+    runtime.__laceConnectAttempts = 0;
+    runtime.__laceProofAttempts = 0;
+
+    const connectedApi = {
+      getConnectionStatus: async () => runtime.__laceConnected
+        ? { status: "connected", networkId: "preprod" }
+        : { status: "disconnected" },
+      hintUsage: async () => {},
+      getConfiguration: async () => ({
+        indexerUri: "https://indexer.preprod.midnight.network/api/v3/graphql",
+        indexerWsUri: "wss://indexer.preprod.midnight.network/api/v3/graphql/ws",
+        substrateNodeUri: "https://rpc.preprod.midnight.network",
+        networkId: "preprod",
+      }),
+      getShieldedAddresses: async () => ({
+        shieldedAddress: "private_test_wallet_address",
+        shieldedCoinPublicKey: "mn_shield-pub_preprod1privatecoin",
+        shieldedEncryptionPublicKey: "mn_shield-epk_preprod1privateencryption",
+      }),
+      getProvingProvider: async () => {
+        runtime.__laceProofAttempts += 1;
+        if (rejectFirstProofProvider && runtime.__laceProofAttempts === 1) {
+          throw new Error("private proving service detail");
+        }
+        return {
+          check: async () => [],
+          prove: async () => new Uint8Array([1]),
+        };
+      },
+      balanceUnsealedTransaction: async () => ({ tx: "00" }),
+      submitTransaction: async () => {},
+    };
+
+    runtime.midnight = {
+      mnLace: {
+        rdns: "io.midnight.lace",
+        name: "Lace Test Wallet",
+        icon: "data:image/svg+xml,ignored",
+        apiVersion: "4.0.1",
+        connect: async () => {
+          runtime.__laceConnectAttempts += 1;
+          if (rejectFirstConnection && runtime.__laceConnectAttempts === 1) {
+            throw Object.assign(new Error("private rejection detail"), {
+              type: "DAppConnectorAPIError",
+              code: "PermissionRejected",
+              reason: "private wallet reason",
+            });
+          }
+          runtime.__laceConnected = true;
+          return connectedApi;
+        },
+      },
+    };
+  }, options);
 }
 
 test("an invalid portfolio fails locally without producing a public artifact", async ({ page }) => {
@@ -70,7 +158,7 @@ test("a compliant portfolio creates only an explicitly local preview", async ({ 
   await expect(publicPanel).toContainText("Not submitted");
   await expect(publicPanel).not.toContainText("Midnight Preprod");
   await expect(publicPanel).not.toContainText(/vr_[a-z0-9]+/i);
-  await expect(page.getByText("Local prototype")).toBeVisible();
+  await expect(page.getByText("Local preview", { exact: true })).toBeVisible();
 });
 
 test("editing private input clears a stale local preview", async ({ page }) => {
@@ -193,4 +281,60 @@ test("private allocations stay out of URLs, storage, and the shareable panel", a
     expect(storageText).not.toContain(prohibitedValue);
     expect(requestedUrls.join("\n")).not.toContain(prohibitedValue);
   }
+});
+
+test("wallet unavailable is accurate and recoverable", async ({ page }) => {
+  await openInteractiveApp(page);
+  await page.getByRole("button", { name: "Connect Lace" }).click();
+
+  const walletSetup = page.getByLabel("Lace wallet and proving setup");
+  await expect(walletSetup.getByRole("alert")).toContainText("Lace was not found");
+  await expect(walletSetup).not.toContainText("private");
+  await expect(walletSetup.getByRole("button", { name: "Retry Lace connection" })).toBeEnabled();
+});
+
+test("wallet authorization rejection can be retried successfully", async ({ page }) => {
+  await installMockLace(page, { rejectFirstConnection: true });
+  await openInteractiveApp(page);
+  const walletSetup = page.getByLabel("Lace wallet and proving setup");
+
+  await walletSetup.getByRole("button", { name: "Connect Lace" }).click();
+  await expect(walletSetup.getByRole("alert")).toContainText("authorization was rejected");
+  await expect(walletSetup).not.toContainText("private rejection detail");
+
+  await walletSetup.getByRole("button", { name: "Retry Lace connection" }).click();
+  await expect(walletSetup.getByRole("status")).toContainText("Lace Test Wallet connected");
+  await expect(walletSetup).toContainText("Wallet-delegated proving is configured");
+  await expect(walletSetup).toContainText("No proof or transaction has been requested");
+  await expect(page).not.toHaveURL(/wallet|address|private/i);
+});
+
+test("proof-provider setup failure is private and recoverable", async ({ page }) => {
+  await installMockLace(page, { rejectFirstProofProvider: true });
+  await openInteractiveApp(page);
+  const walletSetup = page.getByLabel("Lace wallet and proving setup");
+
+  await walletSetup.getByRole("button", { name: "Connect Lace" }).click();
+  await expect(walletSetup.getByRole("alert")).toContainText("could not configure its proving provider");
+  await expect(walletSetup).not.toContainText("private proving service detail");
+
+  await walletSetup.getByRole("button", { name: "Retry Lace connection" }).click();
+  await expect(walletSetup.getByRole("status")).toContainText("Lace Test Wallet connected");
+});
+
+test("a disconnected Lace session fails closed and reconnects", async ({ page }) => {
+  await installMockLace(page);
+  await openInteractiveApp(page);
+  const walletSetup = page.getByLabel("Lace wallet and proving setup");
+
+  await walletSetup.getByRole("button", { name: "Connect Lace" }).click();
+  await expect(walletSetup.getByRole("status")).toContainText("connected");
+  await page.evaluate(() => {
+    (window as unknown as { __laceConnected: boolean }).__laceConnected = false;
+  });
+  await walletSetup.getByRole("button", { name: "Check connection" }).click();
+  await expect(walletSetup.getByRole("alert")).toContainText("connection was lost");
+
+  await walletSetup.getByRole("button", { name: "Retry Lace connection" }).click();
+  await expect(walletSetup.getByRole("status")).toContainText("Lace Test Wallet connected");
 });

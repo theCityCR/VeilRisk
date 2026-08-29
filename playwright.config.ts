@@ -2,7 +2,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  fullyParallel: true,
+  // Vinext can invalidate optimized dependency URLs when multiple browsers
+  // first load the Midnight SDK concurrently. Serial execution keeps the
+  // desktop/mobile quality gate deterministic.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: true,
   reporter: "line",
   use: {
@@ -21,7 +25,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --port 4173",
+    command: "npm run dev -- --force --port 4173",
     url: "http://localhost:4173",
     reuseExistingServer: false,
   },

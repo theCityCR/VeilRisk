@@ -367,7 +367,8 @@ Implemented:
 - deterministic browser E2E coverage at desktop and mobile viewports for
   presets, invalid totals, policy boundaries, stale-state invalidation,
   keyboard use, fresh sessions, public-surface privacy, outbound submission
-  absence, viewport overflow, and unexpected browser errors;
+  absence, viewport overflow, unexpected browser errors, Lace absence,
+  authorization rejection, disconnection, retry, and recovery;
 - injectable wallet, proof-provider, transaction, indexer, and AI ports with a
   deterministic orchestration suite covering local short-circuiting, lifecycle
   order, dependency failures, retry recovery, and disclosure filtering;
@@ -375,6 +376,10 @@ Implemented:
   binding, serves generated ZK assets from an ignored build path, submits the
   typed `proveCompliance` private inputs, and returns only public transaction
   identifiers;
+- Lace connector API 4 discovery and Preprod validation with wallet-delegated
+  proving, transaction balancing/submission, and indexer providers kept behind
+  the verification adapter; setup exposes no wallet address, key material,
+  allocations, proof, signature request, or transaction;
 - public-safe explanation copy;
 - verified Compact contract compilation and simulator tests for policy
   boundaries and assertion failures;
@@ -383,11 +388,9 @@ Implemented:
 
 Not yet implemented or verified:
 
-- browser E2E coverage for wallet, proof-provider, transaction, indexer, and AI
+- browser E2E coverage for proof execution, transaction, indexer, and AI
   journeys when those product surfaces are implemented;
-- Lace wallet discovery, connection, and provider creation for the
-  generated-binding adapter;
-- proof server configuration;
+- real proof generation through Lace's configured proving provider;
 - deployment to a Midnight network;
 - real proof and transaction lifecycle;
 - AI API integration; and

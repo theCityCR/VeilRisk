@@ -69,6 +69,19 @@ output { text-align: right; font-family: var(--font-geist-mono), monospace; colo
 .policy-box h3 { margin: 5px 0 0; font-size: 15px; }
 .policy-box label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; }
 select { color: var(--ink); background: #151624; border: 1px solid var(--line); border-radius: 8px; padding: 7px 28px 7px 9px; }
+.wallet-box { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,.018); }
+.wallet-box h3 { margin: 5px 0 0; font-size: 15px; }
+.wallet-box > p { margin: 12px 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.wallet-status { display: grid; gap: 4px; margin: 12px 0; border-radius: 10px; padding: 10px 12px; }
+.wallet-status strong { font-size: 12px; }
+.wallet-status small { color: var(--muted); line-height: 1.5; }
+.wallet-status.connected { border: 1px solid rgba(184,244,207,.2); background: rgba(184,244,207,.06); }
+.wallet-status.connected strong { color: var(--mint); }
+.wallet-status.failed { border: 1px solid rgba(255,140,140,.24); background: rgba(255,140,140,.06); }
+.wallet-status.failed strong { color: var(--danger); }
+.wallet-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wallet-actions button { border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; color: var(--ink); background: #181925; font-size: 11px; }
+.wallet-actions button:disabled { cursor: wait; opacity: .65; }
 .local-check { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,.018); }
 .local-check-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .local-check-heading h3 { margin: 5px 0 0; font-size: 15px; }

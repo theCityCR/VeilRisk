@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type {
+  LaceConnectionSummary,
+  LaceConnectorPort,
+  LaceFailureReason,
+} from "../lib/verification";
 import { BASIS_POINTS_TOTAL, DEFAULT_POLICY, evaluatePortfolio, formatBasisPoints, type Allocation, type RiskPolicy } from "../lib/risk";
 
 const balancedPortfolio: Allocation = { cash: 1_500, bonds: 2_500, equities: 5_000, speculative: 1_000 };
@@ -12,11 +17,19 @@ const labels: Record<keyof Allocation, string> = {
   speculative: "Speculative",
 };
 
+type WalletSetupState =
+  | { status: "idle" }
+  | { status: "connecting" }
+  | { status: "connected"; summary: LaceConnectionSummary }
+  | { status: "failed"; reason: LaceFailureReason; message: string };
+
 export default function Home() {
   const [allocation, setAllocation] = useState<Allocation>(balancedPortfolio);
   const [policy, setPolicy] = useState<RiskPolicy>(DEFAULT_POLICY);
   const [hasLocalPreview, setHasLocalPreview] = useState(false);
   const [validationAttempted, setValidationAttempted] = useState(false);
+  const [walletSetup, setWalletSetup] = useState<WalletSetupState>({ status: "idle" });
+  const walletConnector = useRef<LaceConnectorPort | null>(null);
   const evaluation = useMemo(() => evaluatePortfolio(allocation, policy), [allocation, policy]);
 
   const clearLocalPreview = () => {
@@ -38,13 +51,46 @@ export default function Home() {
     }
   };
 
+  const getWalletConnector = async () => {
+    if (!walletConnector.current) {
+      const { createBrowserLaceConnector } = await import("../lib/verification");
+      walletConnector.current = createBrowserLaceConnector();
+    }
+    return walletConnector.current;
+  };
+
+  const walletFailure = async (cause: unknown) => {
+    const { LaceConnectorError, getLaceFailureMessage } = await import("../lib/verification");
+    const reason = cause instanceof LaceConnectorError ? cause.reason : "unknown";
+    return { status: "failed" as const, reason, message: getLaceFailureMessage(reason) };
+  };
+
+  const connectWallet = async () => {
+    setWalletSetup({ status: "connecting" });
+    try {
+      const summary = await (await getWalletConnector()).connect();
+      setWalletSetup({ status: "connected", summary });
+    } catch (cause) {
+      setWalletSetup(await walletFailure(cause));
+    }
+  };
+
+  const checkWallet = async () => {
+    try {
+      const summary = await (await getWalletConnector()).checkConnection();
+      setWalletSetup({ status: "connected", summary });
+    } catch (cause) {
+      setWalletSetup(await walletFailure(cause));
+    }
+  };
+
   return (
     <main>
       <header className="site-header">
         <a className="brand" href="#top" aria-label="VeilRisk home">
           <span className="brand-mark" aria-hidden="true">V</span><span>VeilRisk</span>
         </a>
-        <div className="network-pill"><span className="network-dot" /> Local prototype</div>
+        <div className="network-pill"><span className="network-dot" /> Local preview{walletSetup.status === "connected" ? " · Lace ready" : ""}</div>
       </header>
 
       <section className="hero" id="top">
@@ -93,6 +139,40 @@ export default function Home() {
                 <option value="1000">10%</option><option value="2000">20%</option><option value="3000">30%</option>
               </select>
             </label>
+          </div>
+
+          <div className="wallet-box" aria-label="Lace wallet and proving setup">
+            <div>
+              <span className="panel-kicker">Midnight setup · Preprod</span>
+              <h3>Lace wallet &amp; proving</h3>
+            </div>
+            {walletSetup.status === "connected" ? (
+              <div className="wallet-status connected" role="status">
+                <strong>{walletSetup.summary.walletName} connected</strong>
+                <small>Wallet-delegated proving is configured. No proof or transaction has been requested.</small>
+              </div>
+            ) : walletSetup.status === "failed" ? (
+              <div className="wallet-status failed" role="alert">
+                <strong>Wallet setup incomplete</strong>
+                <small>{walletSetup.message}</small>
+              </div>
+            ) : (
+              <p>Connect Lace to prepare wallet-delegated proving. This does not expose allocations or request a signature.</p>
+            )}
+            <div className="wallet-actions">
+              <button type="button" onClick={connectWallet} disabled={walletSetup.status === "connecting"}>
+                {walletSetup.status === "connecting"
+                  ? "Connecting…"
+                  : walletSetup.status === "failed"
+                    ? "Retry Lace connection"
+                    : walletSetup.status === "connected"
+                      ? "Reconnect Lace"
+                      : "Connect Lace"}
+              </button>
+              {walletSetup.status === "connected" ? (
+                <button type="button" onClick={checkWallet}>Check connection</button>
+              ) : null}
+            </div>
           </div>
 
           <div className="local-check" aria-label="Private local policy results">
