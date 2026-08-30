@@ -23,7 +23,8 @@ Midnight without publishing the underlying allocation.
 ### Project links
 
 - Code: <https://github.com/theCityCR/VeilRisk>
-- Demo video: `[PUBLIC VIDEO URL]`
+- Demo video:
+  <https://drive.google.com/file/d/1SAPszzawdSMAZ_9S8wwn9rOeh7rywxZX/view?usp=sharing>
 - Live app: `[PUBLIC APP URL, IF AVAILABLE]`
 - Verified Preprod evidence:
   <https://github.com/theCityCR/VeilRisk/blob/main/docs/PREPROD_DEPLOYMENT.md>
@@ -184,10 +185,10 @@ Suggested alt text:
 - [ ] Confirm the team has no more than five members and the project is entered
   in only this hackathon.
 - [ ] Keep the repository public after the event.
-- [ ] Record and publish a demo no longer than two minutes during the hackathon
+- [x] Record and publish a demo no longer than two minutes during the hackathon
   weekend.
-- [ ] Say “Midnight Hackathon: August 2026” at the beginning of the video.
-- [ ] Add the public video URL above and keep the video public after the event.
+- [x] Say “Midnight Hackathon: August 2026” at the beginning of the video.
+- [x] Add the public video URL above and keep the video public after the event.
 - [ ] Add a public live-app URL if one is available; do not delay submission if
   Devpost does not require one.
 - [ ] Upload the primary image and verify that its local-preview label is

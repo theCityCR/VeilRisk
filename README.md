@@ -24,6 +24,9 @@ identifier, and compliance outcome. `contract/src/veilrisk.compact` contains the
 matching Compact circuit, and both engines run the same shared basis-point
 boundary vectors in tests.
 
+The public two-minute submission demo is available on
+[Google Drive](https://drive.google.com/file/d/1SAPszzawdSMAZ_9S8wwn9rOeh7rywxZX/view?usp=sharing).
+
 ![VeilRisk private portfolio controls beside a privacy-safe local compliance preview](docs/assets/veilrisk-private-public-preview.jpg)
 
 _The submission image deliberately shows the explicitly labelled local preview;
@@ -150,7 +153,7 @@ maintenance workflow; the deployed policy is intended to remain fixed.
 
 - Review and paste the prepared
   [`docs/DEVPOST_SUBMISSION.md`](docs/DEVPOST_SUBMISSION.md) copy into Devpost.
-- Record the required two-minute public demo.
+- Submit the completed Devpost entry before the event deadline.
 
 ## Project structure
 

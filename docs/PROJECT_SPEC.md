@@ -385,6 +385,9 @@ Implemented:
 - a finalized real browser compliance proof through Lace on Preprod, followed
   by independent indexer inspection confirming successful execution, the fixed
   public policy, one successful proof, and absence of allocation field labels;
+- a publicly accessible one-minute-fifty-five-second submission video recorded
+  during the event, showing the local privacy boundary and real Preprod proof
+  lifecycle;
 - a deterministic, public-safe local privacy summary that distinguishes a local
   preview from finalized verification and makes no external request;
 - verified Compact contract compilation and simulator tests for policy
@@ -394,8 +397,8 @@ Implemented:
 
 Not yet implemented or verified:
 
-- final Devpost form submission and required public two-minute demo; a
-  copy-ready submission draft is maintained in `docs/DEVPOST_SUBMISSION.md`.
+- final Devpost form submission; a copy-ready submission draft is maintained in
+  `docs/DEVPOST_SUBMISSION.md` and includes the public demo-video URL.
 
 ## 11. Resume-quality outcome
 
