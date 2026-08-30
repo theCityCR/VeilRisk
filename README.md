@@ -25,7 +25,9 @@ matching Compact circuit, and both engines run the same shared basis-point
 boundary vectors in tests.
 
 The public two-minute submission demo is available on
-[Google Drive](https://drive.google.com/file/d/1SAPszzawdSMAZ_9S8wwn9rOeh7rywxZX/view?usp=sharing).
+[YouTube](https://youtu.be/csymkiQ3Q_0). A
+[Google Drive copy](https://drive.google.com/file/d/1SAPszzawdSMAZ_9S8wwn9rOeh7rywxZX/view?usp=sharing)
+is also available as a backup.
 
 ![VeilRisk private portfolio controls beside a privacy-safe local compliance preview](docs/assets/veilrisk-private-public-preview.jpg)
 

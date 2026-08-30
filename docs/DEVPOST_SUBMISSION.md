@@ -1,8 +1,7 @@
 # VeilRisk Devpost submission
 
 This is the copy-ready submission draft for **Midnight Hackathon: August
-2026**. Replace the bracketed URL fields and add the public demo-video URL
-before submitting. The current event requirements and deadline are published on
+2026**. The current event requirements and deadline are published on
 the [official Devpost page](https://midnight-hackathon-august-2026.devpost.com/).
 
 ## Submission fields
@@ -23,7 +22,8 @@ Midnight without publishing the underlying allocation.
 ### Project links
 
 - Code: <https://github.com/theCityCR/VeilRisk>
-- Demo video:
+- Embedded demo video: <https://youtu.be/csymkiQ3Q_0>
+- Demo video backup:
   <https://drive.google.com/file/d/1SAPszzawdSMAZ_9S8wwn9rOeh7rywxZX/view?usp=sharing>
 - Live app: `[PUBLIC APP URL, IF AVAILABLE]`
 - Verified Preprod evidence:
@@ -161,22 +161,64 @@ data.
   investment managers, treasury policies, and regulated financial workflows
   without exposing proprietary positions.
 
-## Submission image
+## Project gallery
 
 Use `docs/assets/veilrisk-private-public-preview.jpg` as the primary project
-image after it has been captured from the real app in the explicitly labelled
-**Private local preview · not on-chain** state.
+image. Add these three 3:2 images from the real demo in the listed order:
 
-Suggested caption:
+1. `docs/assets/veilrisk-product-overview.jpg`
+2. `docs/assets/veilrisk-local-rejection.jpg`
+3. `docs/assets/veilrisk-finalized-attestation.jpg`
+
+### Primary image
+
+Caption:
 
 > Private allocation and local policy details stay on the left; the shareable
 > panel on the right reveals the compliance outcome while disclosing no
 > holdings. This screenshot is a local preview, not a finalized transaction.
 
-Suggested alt text:
+Alt text:
 
 > VeilRisk interface with private portfolio allocation controls beside a
 > privacy-safe compliance panel labelled as a local preview and not on-chain.
+
+### Product overview
+
+Caption:
+
+> VeilRisk turns a private allocation into a public compliance result through
+> a local policy check and a Midnight proof.
+
+Alt text:
+
+> VeilRisk product overview showing the flow from private allocation through a
+> local policy check and Midnight proof to public success.
+
+### Local rejection
+
+Caption:
+
+> A risky demo portfolio remains private and produces no attestation. Invalid
+> inputs stop locally before Lace approval or a Preprod transaction.
+
+Alt text:
+
+> VeilRisk showing a risky private portfolio beside a public panel that says no
+> attestation was created.
+
+### Finalized attestation
+
+Caption:
+
+> A real Lace-approved transaction finalized on Midnight Preprod. The public
+> attestation reports compliance while explicitly showing that no holdings were
+> disclosed.
+
+Alt text:
+
+> VeilRisk showing a finalized compliant on-chain attestation on Midnight
+> Preprod with holdings disclosed listed as none.
 
 ## Final submission checklist
 
@@ -191,8 +233,8 @@ Suggested alt text:
 - [x] Add the public video URL above and keep the video public after the event.
 - [ ] Add a public live-app URL if one is available; do not delay submission if
   Devpost does not require one.
-- [ ] Upload the primary image and verify that its local-preview label is
-  readable at Devpost thumbnail size.
+- [ ] Upload the four gallery images in the documented order and verify that
+  their privacy and verification labels are readable at Devpost thumbnail size.
 - [ ] Submit before **August 30, 2026 at 11:45 a.m. EDT**.
 - [ ] Re-open the submitted project page and verify the code, video, image, and
   description are publicly accessible.
